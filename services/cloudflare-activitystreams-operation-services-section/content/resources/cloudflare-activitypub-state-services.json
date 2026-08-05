@@ -1,0 +1,18 @@
+{
+  "type": "CloudflareActivityPubNetworkStateServices",
+  "owner": "red-cup-engineering",
+  "accountId": "337e54ee6dc7d488933f473204a6d89e",
+  "kv": {
+    "binding": "ACTIVITYPUB_KV",
+    "namespace": "red-cup-engineering-activitypub-protocol-state",
+    "namespaceId": "156168663a5d48ea9a9dd1ba961ddd13"
+  },
+  "queue": {
+    "binding": "ACTIVITYPUB_QUEUE",
+    "name": "red-cup-engineering-activitypub-delivery",
+    "queueId": "ce82fff781e04c3c84601f384df03388",
+    "deadLetterQueue": "red-cup-engineering-activitypub-dead-letter",
+    "deadLetterQueueId": "cd4db27d9a264ffcb4a0decbd0e8ed48"
+  },
+  "credentials": "Cloudflare Worker secret bindings only; no credential material belongs in this package"
+}
