@@ -1,0 +1,13 @@
+{
+  "name": "@red-cup-engineering/cloudflare-activitystreams-operation-services-section",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare R2 and Worker operations with ActivityStreams adapters.",
+  "scripts": { "check": "node --check src/contract-cloudflare-r2-object-custody.js && node --check src/contract-cloudflare-static-delivery.js && node --check src/contract-cloudflare-primary-static-release.js && node --check src/contract-cloudflare-koios-attention.js" },
+  "dependencies": {
+    "@red-cup-engineering/a2a-effect-assay-services-section": "1.0.0",
+    "@red-cup-engineering/cloudflare-r2-services-section": "1.0.0",
+    "wrangler": "4.112.0"
+  }
+}
