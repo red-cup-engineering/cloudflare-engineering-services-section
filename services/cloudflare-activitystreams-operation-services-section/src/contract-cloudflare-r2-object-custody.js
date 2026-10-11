@@ -16,8 +16,8 @@ import {
   validateStoreRequest,
 } from "@red-cup-engineering/cloudflare-r2-services-section/object-custody";
 import { createR2SigV4Client, r2Configuration } from "@red-cup-engineering/cloudflare-r2-services-section/r2-sigv4";
-import { completeEffect, proposeEffect, semanticBytesId, textNi } from "@red-cup-engineering/a2a-effect-assay-services-section/effect-assay";
-import { witnessJournalBindingFromArgv, recordWitnessedBoundaryAct } from "./removed-witness-journal.mjs";
+import { completeEffect, proposeEffect, semanticBytesId, textNi } from "@red-cup-engineering/computer-inference-engine/fabric/effect-assay";
+import { witnessJournalBindingFromArgv, recordWitnessedBoundaryAct } from "./boundary-witness.mjs";
 
 const CONTEXT = "https://www.w3.org/ns/activitystreams";
 const CAIP10 = /^eip155:[1-9][0-9]*:0x[0-9a-fA-F]{40}$/u;
@@ -111,7 +111,7 @@ async function solicit(activity, at) {
   if (refusals.length !== 0) return emit(response("Question", activity, { type: "ServiceTermsRequired", contract: CONTRACT, missing: refusals }));
   let effect;
   try { effect = await proposal(activity.object.sourceActivity, request, at); }
-  catch (error) { return await reject(activity, "rmn-conformance-refused", at, { detail: error.message }); }
+  catch (error) { return await reject(activity, "sen-conformance-refused", at, { detail: error.message }); }
   const offer = response("Offer", activity, { type: "ExecutableServiceOffer", contract: CONTRACT, sourceActivity: activity.object.sourceActivity.id, request, bindings: bindings(request), effects: request.operation === "store" ? STORE_EFFECTS : READ_EFFECTS, effect: { semanticId: effect.semanticId, evidence: effect.evidence, conformance: effect.conformance }, operation: "invoke-custody-service", exclusions: ["legacy-assets", "delete", "list", "bucket-coordinate-disclosure", "credential-egress", "customer-ledger-mutation"] });
   await recordWitnessedBoundaryAct(offer, "r2-custody.offer-emitted", at, CONTRACT, { operation: request.operation, object: offer.object.bindings.objectId, effect: effect.semanticId }, WitnessJournal);
   emit(offer);
@@ -125,7 +125,7 @@ async function invoke(activity, at) {
   if (refusals.length !== 0 || !isDeepStrictEqual(activity.object.bindings, offer.object.bindings) || !isDeepStrictEqual(offer.object.bindings, bindings(request)) || !isDeepStrictEqual(offer.object.effects, expectedEffects)) return await reject(activity, refusals[0] ?? "accepted offer changed after solicitation", at);
   let proposed;
   try { proposed = await proposal({ id: offer.object.sourceActivity }, request, at); }
-  catch (error) { return await reject(activity, "rmn-conformance-refused", at, { detail: error.message }); }
+  catch (error) { return await reject(activity, "sen-conformance-refused", at, { detail: error.message }); }
   if (proposed.semanticId !== offer.object.effect?.semanticId) return await reject(activity, "effect-commitment-drift", at);
   try {
     const client = createR2SigV4Client(r2Configuration());
@@ -143,7 +143,7 @@ async function invoke(activity, at) {
     const evidence = textNi(`r2-custody-refusal:${message}`);
     let effect;
     try { effect = await completeEffect(PROVIDER, proposed.cell, effectCell(request, { positiveEvidence: false, negativeEvidence: true }, evidence, 0), evidence, at); }
-    catch (transitionError) { return await reject(activity, "rmn-completion-refused", at, { detail: transitionError.message }); }
+    catch (transitionError) { return await reject(activity, "sen-completion-refused", at, { detail: transitionError.message }); }
     await reject(activity, message, at, { effect });
   }
 }
