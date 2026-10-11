@@ -5,8 +5,8 @@ import { lstatSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
-import { completeEffect, proposeEffect, semanticBytesId, textNi } from "@red-cup-engineering/a2a-effect-assay-services-section/effect-assay";
-import { witnessJournalBindingFromArgv, recordWitnessedBoundaryAct } from "./removed-witness-journal.mjs";
+import { completeEffect, proposeEffect, semanticBytesId, textNi } from "@red-cup-engineering/computer-inference-engine/fabric/effect-assay";
+import { witnessJournalBindingFromArgv, recordWitnessedBoundaryAct } from "./boundary-witness.mjs";
 
 const CONTEXT = "https://www.w3.org/ns/activitystreams";
 const ACTOR = "urn:ame:resource-brokerage-service-section";
@@ -56,7 +56,7 @@ function validateRequest(request, at) {
   const remaining = Date.parse(request.expiresAt) - Date.parse(at);
   if (!(remaining > 0 && remaining <= 3_600_000)) return "attention request expiry must be after now and no more than one hour away";
   if (!CAIP10.test(request.caller ?? "")) return "attention request requires one CAIP-10 caller";
-  if (request.parentEffect !== null && !NI.test(request.parentEffect ?? "")) return "attention request parentEffect must be an RMN ni identity or null";
+  if (request.parentEffect !== null && !NI.test(request.parentEffect ?? "")) return "attention request parentEffect must be an SEN ni identity or null";
   if (!CAIP10.test(process.env.RESOURCE_BROKERAGE_PROVIDER_CAIP10 ?? "")) return "resource broker CAIP-10 identity is absent";
   return undefined;
 }
@@ -127,7 +127,7 @@ async function solicit(activity, at) {
   const problem = validateRequest(request, at);
   if (problem) return emit(response("Question", activity, { type: "ServiceTermsRequired", contract: CONTRACT, missing: [problem] }));
   let effect;
-  try { effect = await proposal(activity.object.sourceActivity, request, at); } catch (error) { return await reject(activity, "rmn-conformance-refused", at, { detail: error.message }); }
+  try { effect = await proposal(activity.object.sourceActivity, request, at); } catch (error) { return await reject(activity, "sen-conformance-refused", at, { detail: error.message }); }
   const offer = response("Offer", activity, { type: "ExecutableServiceOffer", contract: CONTRACT, sourceActivity: activity.object.sourceActivity.id, request, bindings: bindings(request), effects: EFFECTS, effect: { semanticId: effect.semanticId, evidence: effect.evidence, conformance: effect.conformance }, operation: "invoke-attention-service", exclusions: ["reader-identifiers", "referrers", "customer-ledger-mutation", "credential-egress", "content-mutation"] });
   await witness(offer, "attention.offer-emitted", at, { effect: effect.semanticId });
   emit(offer);
@@ -139,7 +139,7 @@ async function invoke(activity, at) {
   const problem = validateRequest(request, at);
   if (problem || !isDeepStrictEqual(activity.object.bindings, offer.object.bindings) || !isDeepStrictEqual(offer.object.bindings, bindings(request)) || !isDeepStrictEqual(offer.object.effects, EFFECTS)) return await reject(activity, problem ?? "accepted offer changed after solicitation", at);
   let proposed;
-  try { proposed = await proposal({ id: offer.object.sourceActivity }, request, at); } catch (error) { return await reject(activity, "rmn-conformance-refused", at, { detail: error.message }); }
+  try { proposed = await proposal({ id: offer.object.sourceActivity }, request, at); } catch (error) { return await reject(activity, "sen-conformance-refused", at, { detail: error.message }); }
   if (proposed.semanticId !== offer.object.effect?.semanticId) return await reject(activity, "effect-commitment-drift", at);
   try {
     const values = await readings(credential(), request);
@@ -153,7 +153,7 @@ async function invoke(activity, at) {
     const evidence = textNi(`attention-refusal:${error instanceof Error ? error.message : String(error)}`);
     let effect;
     try { effect = await completeEffect(ACTOR, proposed.cell, effectCell({ id: offer.object.sourceActivity }, request, { positiveEvidence: false, negativeEvidence: true }, evidence, 0), evidence, at); }
-    catch (transitionError) { return await reject(activity, "rmn-completion-refused", at, { detail: transitionError.message }); }
+    catch (transitionError) { return await reject(activity, "sen-completion-refused", at, { detail: transitionError.message }); }
     await reject(activity, error instanceof Error ? error.message : String(error), at, { effect });
   }
 }

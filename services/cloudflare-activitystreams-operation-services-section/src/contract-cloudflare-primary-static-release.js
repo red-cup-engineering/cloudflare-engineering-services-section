@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import { sha256Hex } from "@red-cup-engineering/cryptographic-computer-data-engineering-services-section/integrity";
 import { spawnSync } from "node:child_process";
 import {
   closeSync,
@@ -19,8 +20,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
-import { artifactChecksum, completeEffect, proposeEffect, semanticBytesId, textNi } from "@red-cup-engineering/a2a-effect-assay-services-section/effect-assay";
-import { witnessJournalBindingFromArgv, wasWitnessed, recordWitnessedBoundaryAct } from "./removed-witness-journal.mjs";
+import { artifactChecksum, completeEffect, proposeEffect, semanticBytesId, textNi } from "@red-cup-engineering/computer-inference-engine/fabric/effect-assay";
+import { witnessJournalBindingFromArgv, wasWitnessed, recordWitnessedBoundaryAct } from "./boundary-witness.mjs";
 
 const CONTEXT = "https://www.w3.org/ns/activitystreams";
 const NODE_ID = "resource-brokerage-service-section";
@@ -101,7 +102,7 @@ function treeReading(rootValue) {
     }
   }
   visit(root);
-  const treeCarrier = files.map((file) => `<urn:path:${encodeURIComponent(file.path)}> <urn:rmn:bytes> ${literal(file.bytes)}; <urn:rmn:content> <${file.digest}> .`).join("\n");
+  const treeCarrier = files.map((file) => `<urn:path:${encodeURIComponent(file.path)}> <urn:sen:bytes> ${literal(file.bytes)}; <urn:sen:content> <${file.digest}> .`).join("\n");
   return Object.freeze({ root, files: Object.freeze(files), fileCount: files.length, totalBytes, treeDigest: artifactChecksum(Buffer.from(`${treeCarrier}\n`, "utf8")) });
 }
 
@@ -122,7 +123,7 @@ function inspectRequest(request, at) {
     if (!(remaining > 0 && remaining <= MAX_OFFER_MS)) problems.push(`expiresAt(>now and <=${MAX_OFFER_MS}ms)`);
   }
   if (!CAIP10.test(request?.caller ?? "")) problems.push("caller(CAIP-10)");
-  if (request?.parentEffect !== null && !NI.test(request?.parentEffect ?? "")) problems.push("parentEffect(RMN-ni-or-null)");
+  if (request?.parentEffect !== null && !NI.test(request?.parentEffect ?? "")) problems.push("parentEffect(SEN-ni-or-null)");
   if (!CAIP10.test(process.env.RESOURCE_BROKERAGE_PROVIDER_CAIP10 ?? "")) problems.push("provider(CAIP-10)");
   if (problems.length > 0) return { problems };
   try {
@@ -202,7 +203,7 @@ async function solicit(activity, at) {
   const settled = terms(request, inspection);
   let effect;
   try { effect = await proposedEffect(activity.object.sourceActivity, request, settled.bindings, at); }
-  catch (error) { await reject(activity, "rmn-conformance-refused", at, { detail: error.message }); return; }
+  catch (error) { await reject(activity, "sen-conformance-refused", at, { detail: error.message }); return; }
   const object = {
     type: "ExecutableServiceOffer",
     contract: CONTRACT,
@@ -230,7 +231,7 @@ async function validateInvocation(activity, at) {
   if (!isDeepStrictEqual(settled.bindings, offer.object.bindings) || !isDeepStrictEqual(settled.effects, offer.object.effects) || !isDeepStrictEqual(contract.bindings, offer.object.bindings)) return { problem: "accepted offer no longer matches the exact release evidence" };
   let proposed;
   try { proposed = await proposedEffect({ id: offer.object.sourceActivity }, offer.object.request, settled.bindings, at); }
-  catch (error) { return { problem: `rmn-conformance-refused: ${error.message}` }; }
+  catch (error) { return { problem: `sen-conformance-refused: ${error.message}` }; }
   if (proposed.semanticId !== offer.object.effect?.semanticId) return { problem: "effect-commitment-drift" };
   return { offer, request: offer.object.request, inspection, proposed };
 }
@@ -261,8 +262,8 @@ function wranglerExecutable() {
 }
 
 function subprocess(executable, args, cwd, token, timeout = 180_000) {
-  const stdoutPath = join(cwd, `stdout-${createHash("sha256").update(args.join("\0")).digest("hex").slice(0, 12)}.txt`);
-  const stderrPath = join(cwd, `stderr-${createHash("sha256").update(args.join("\0")).digest("hex").slice(0, 12)}.txt`);
+  const stdoutPath = join(cwd, `stdout-${sha256Hex(args.join("\0")).slice(0, 12)}.txt`);
+  const stderrPath = join(cwd, `stderr-${sha256Hex(args.join("\0")).slice(0, 12)}.txt`);
   const stdoutFd = openSync(stdoutPath, "w+"); const stderrFd = openSync(stderrPath, "w+");
   let result;
   try {
@@ -469,7 +470,7 @@ async function invoke(activity, at) {
     try {
       effect = await completeEffect(ACTOR, validated.proposed.cell, effectCell(validated.request, validated.offer.object.bindings, { positiveEvidence: false, negativeEvidence: true }, evidence, "1"), evidence, at);
     } catch (transitionError) {
-      await reject(activity, "rmn-completion-refused", at, { detail: transitionError.message, networkCalls: 0, credentialRead: false });
+      await reject(activity, "sen-completion-refused", at, { detail: transitionError.message, networkCalls: 0, credentialRead: false });
       return;
     }
     await reject(activity, reason, at, {
@@ -489,7 +490,7 @@ async function invoke(activity, at) {
       const rolledBackCell = effectCell(validated.request, validated.offer.object.bindings, { positiveEvidence: true, negativeEvidence: true }, rollbackEvidence, "2");
       rollbackEffect = await completeEffect(ACTOR, deployedCell, rolledBackCell, rollbackEvidence, at);
     } catch (transitionError) {
-      await reject(activity, "rmn-completion-refused", at, { detail: transitionError.message, credentialRecorded: false });
+      await reject(activity, "sen-completion-refused", at, { detail: transitionError.message, credentialRecorded: false });
       return;
     }
     await reject(activity, "candidate failed public probes and the prior Cloudflare Worker version was restored", at, {
@@ -502,7 +503,7 @@ async function invoke(activity, at) {
   const evidence = textNi(`primary-release:${execution.disposition}:${validated.offer.object.bindings.artifactTreeDigest}`);
   let effect;
   try { effect = await completeEffect(ACTOR, validated.proposed.cell, effectCell(validated.request, validated.offer.object.bindings, { positiveEvidence: true, negativeEvidence: false }, evidence, "1"), evidence, at); }
-  catch (transitionError) { await reject(activity, "rmn-completion-refused", at, { detail: transitionError.message }); return; }
+  catch (transitionError) { await reject(activity, "sen-completion-refused", at, { detail: transitionError.message }); return; }
   const object = { type: execution.disposition === "released" ? "CloudflarePrimaryStaticReleaseReceipt" : "CloudflarePrimaryStaticPackagingResult", contract: CONTRACT, disposition: execution.disposition, bindings: validated.offer.object.bindings, execution, effect, publicAuthority: execution.disposition === "released" ? "cloudflare-worker:koios-news-primary" : "unchanged", routeMutated: false, dnsMutated: false, vpsPublicOrigin: false, credentialRecorded: false };
   await witness(activity, "primary-release.completed", at, { disposition: execution.disposition, witness: effect.witness, publicAuthority: object.publicAuthority });
   emit(response("Accept", activity, object));

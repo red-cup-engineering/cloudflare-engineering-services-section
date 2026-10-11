@@ -1,19 +1,22 @@
 {
   "name": "@red-cup-engineering/cloudflare-activitystreams-operation-services-section",
-  "version": "1.0.0",
-  "private": true,
+  "version": "0.1.0",
   "type": "module",
   "description": "Cloudflare R2 and Worker operations with ActivityStreams adapters.",
   "scripts": {
-    "check": "node --check src/contract-cloudflare-r2-object-custody.js && node --check src/contract-cloudflare-static-delivery.js && node --check src/contract-cloudflare-primary-static-release.js && node --check src/contract-cloudflare-koios-attention.js"
+    "check": "node --check src/contract-cloudflare-r2-object-custody.js && node --check src/contract-cloudflare-static-delivery.js && node --check src/contract-cloudflare-primary-static-release.js && node --check src/contract-cloudflare-koios-attention.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
-    "@red-cup-engineering/a2a-effect-assay-services-section": "1.0.0",
-    "@red-cup-engineering/cloudflare-r2-services-section": "1.0.0",
+    "@red-cup-engineering/cloudflare-r2-services-section": "workspace:*",
+    "@red-cup-engineering/semiotic-eavt-services-section": "workspace:*",
+    "@red-cup-engineering/computer-inference-engine": "workspace:*",
+    "@red-cup-engineering/cryptographic-computer-data-engineering-services-section": "workspace:*",
+    "@red-cup-engineering/uri-services-section": "workspace:*",
     "wrangler": "4.112.0"
   },
-  "bin": {
-    "solicit-primary-release": "./src/contract-cloudflare-primary-static-release.js",
-    "invoke-primary-release": "./src/contract-cloudflare-primary-static-release.js"
+  "devDependencies": {
+    "@red-cup-engineering/witness-journal-document-service": "workspace:*",
+    "@red-cup-engineering/computer-inference-engine": "workspace:*"
   }
 }

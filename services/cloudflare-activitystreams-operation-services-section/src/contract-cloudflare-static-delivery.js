@@ -19,8 +19,8 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
-import { artifactChecksum, completeEffect, proposeEffect, semanticBytesId, textNi } from "@red-cup-engineering/a2a-effect-assay-services-section/effect-assay";
-import { witnessJournalBindingFromArgv, wasWitnessed, recordWitnessedBoundaryAct } from "./removed-witness-journal.mjs";
+import { artifactChecksum, completeEffect, proposeEffect, semanticBytesId, textNi } from "@red-cup-engineering/computer-inference-engine/fabric/effect-assay";
+import { witnessJournalBindingFromArgv, wasWitnessed, recordWitnessedBoundaryAct } from "./boundary-witness.mjs";
 
 const CONTEXT = "https://www.w3.org/ns/activitystreams";
 const NODE_ID = "resource-brokerage-service-section";
@@ -125,7 +125,7 @@ function treeReading(rootPath) {
     }
   }
   visit(root);
-  const carrier = files.map((file) => `<urn:path:${encodeURIComponent(file.path)}> <urn:rmn:bytes> ${literal(file.bytes)}; <urn:rmn:content> <${file.digest}> .`).join("\n");
+  const carrier = files.map((file) => `<urn:path:${encodeURIComponent(file.path)}> <urn:sen:bytes> ${literal(file.bytes)}; <urn:sen:content> <${file.digest}> .`).join("\n");
   return Object.freeze({ path: root, digest: artifactChecksum(Buffer.from(`${carrier}\n`, "utf8")), fileCount: files.length, totalBytes, largestFileBytes: Math.max(0, ...files.map((file) => file.bytes)), files: Object.freeze(files) });
 }
 
@@ -184,7 +184,7 @@ function inspectRequest(request, at) {
   }
   if (!Number.isInteger(request?.timeoutMilliseconds) || request.timeoutMilliseconds < 1 || request.timeoutMilliseconds > MAX_TIMEOUT_MS) problems.push(`timeoutMilliseconds(1..${MAX_TIMEOUT_MS})`);
   if (!CAIP10.test(request?.caller ?? "")) problems.push("caller(CAIP-10)");
-  if (request?.parentEffect !== null && !NI.test(request?.parentEffect ?? "")) problems.push("parentEffect(RMN-ni-or-null)");
+  if (request?.parentEffect !== null && !NI.test(request?.parentEffect ?? "")) problems.push("parentEffect(SEN-ni-or-null)");
   if (!CAIP10.test(process.env.RESOURCE_BROKERAGE_PROVIDER_CAIP10 ?? "")) problems.push("provider(CAIP-10)");
   if (request?.executionMode === "live-preview") {
     if (!request.cloudflare || !safeId(request.cloudflare.accountId)) problems.push("cloudflare.accountId");
@@ -322,7 +322,7 @@ async function solicit(activity, at) {
   const { effects, bindings, scope } = settledTerms(request, inspection.readings);
   let effect;
   try { effect = await proposedEffect(sourceActivity, request, bindings, at); }
-  catch (error) { await reject(activity, "rmn-conformance-refused", at, { detail: error.message }); return; }
+  catch (error) { await reject(activity, "sen-conformance-refused", at, { detail: error.message }); return; }
   const object = {
     type: "ExecutableServiceOffer",
     contract: CONTRACT,
@@ -363,7 +363,7 @@ async function validateInvocation(activity, at) {
   if (!isDeepStrictEqual(contract.bindings, offer.object.bindings)) return { problem: "invocation does not preserve the provider-authored bindings" };
   let proposed;
   try { proposed = await proposedEffect({ id: offer.object.sourceActivity }, request, expected.bindings, at); }
-  catch (error) { return { problem: `rmn-conformance-refused: ${error.message}` }; }
+  catch (error) { return { problem: `sen-conformance-refused: ${error.message}` }; }
   if (proposed.semanticId !== offer.object.effect?.semanticId) return { problem: "effect-commitment-drift" };
   return { offer, request, proposed };
 }
@@ -491,7 +491,7 @@ async function invoke(activity, at) {
   if (validated.problem) {
     const live = activity?.object?.offer?.object?.request?.executionMode === "live-preview";
     await reject(activity, validated.problem, at, {
-      unmet: ["accepted-rmn-effect"],
+      unmet: ["accepted-sen-effect"],
       ...(live ? { networkCalls: 0, subprocessesStarted: 0 } : {}),
     }); return;
   }
@@ -503,7 +503,7 @@ async function invoke(activity, at) {
       const evidence = textNi("static-delivery-refusal:cloudflare-credential-injection");
       let effect;
       try { effect = await completeEffect(ACTOR, proposed.cell, effectCell(request, offer.object.bindings, { positiveEvidence: false, negativeEvidence: true }, evidence, "1"), evidence, at); }
-      catch (error) { await reject(activity, "rmn-completion-refused", at, { detail: error.message }); return; }
+      catch (error) { await reject(activity, "sen-completion-refused", at, { detail: error.message }); return; }
       await reject(activity, "the contracted Cloudflare account operation has no credential injected into this provider process", at, {
         unmet: ["cloudflare-credential-injection"],
         networkCalls: 0,
@@ -518,7 +518,7 @@ async function invoke(activity, at) {
     const evidence = textNi(`static-delivery-refusal:execution-threw:${error.message}`);
     let effect;
     try { effect = await completeEffect(ACTOR, proposed.cell, effectCell(request, offer.object.bindings, { positiveEvidence: false, negativeEvidence: true }, evidence, "1"), evidence, at); }
-    catch (transitionError) { await reject(activity, "rmn-completion-refused", at, { detail: transitionError.message }); return; }
+    catch (transitionError) { await reject(activity, "sen-completion-refused", at, { detail: transitionError.message }); return; }
     await reject(activity, "Cloudflare delivery execution failed before producing a bounded subprocess result", at, {
       effect,
       networkCalls: request.executionMode === "dry-run" ? 0 : "bounded-by-wrangler",
@@ -528,7 +528,7 @@ async function invoke(activity, at) {
     const evidence = textNi(`static-delivery-refusal:subprocess:${execution.status}:${execution.output.digest}`);
     let effect;
     try { effect = await completeEffect(ACTOR, proposed.cell, effectCell(request, offer.object.bindings, { positiveEvidence: false, negativeEvidence: true }, evidence, "1"), evidence, at); }
-    catch (transitionError) { await reject(activity, "rmn-completion-refused", at, { detail: transitionError.message }); return; }
+    catch (transitionError) { await reject(activity, "sen-completion-refused", at, { detail: transitionError.message }); return; }
     await reject(activity, request.executionMode === "dry-run" ? "Wrangler dry-run packaging failed" : "Cloudflare live-preview upload failed", at, {
       execution: { ...execution, previewUrls: undefined },
       effect,
@@ -545,7 +545,7 @@ async function invoke(activity, at) {
       const evidence = textNi(`static-delivery-refusal:hostname:${request.hostname}:${execution.previewUrls.length}`);
       let effect;
       try { effect = await completeEffect(ACTOR, proposed.cell, effectCell(request, offer.object.bindings, { positiveEvidence: false, negativeEvidence: true }, evidence, "1"), evidence, at); }
-      catch (transitionError) { await reject(activity, "rmn-completion-refused", at, { detail: transitionError.message }); return; }
+      catch (transitionError) { await reject(activity, "sen-completion-refused", at, { detail: transitionError.message }); return; }
       await reject(activity, "Cloudflare live-preview result did not witness the exactly bound preview hostname", at, {
         unmet: ["bound-preview-hostname"],
         execution: { ...execution, previewUrls: undefined },
@@ -574,7 +574,7 @@ async function invoke(activity, at) {
     : { type: "CloudflareStaticPreviewResult", ...common, disposition: "preview-uploaded", dryRun: false, observations: { networkCalls: "bounded-by-wrangler", cloudflareCredentialsInjected: true, credentialRecorded: false, providerLocalRecordsAppended: true } };
   const evidence = textNi(`static-delivery:${request.executionMode}:${artifact.digest}:${execution.output.digest}:${execution.uploadArtifact.digest}:${request.hostname}`);
   try { object.effect = await completeEffect(ACTOR, proposed.cell, effectCell(request, offer.object.bindings, { positiveEvidence: true, negativeEvidence: false }, evidence, "1"), evidence, at); }
-  catch (transitionError) { await reject(activity, "rmn-completion-refused", at, { detail: transitionError.message }); return; }
+  catch (transitionError) { await reject(activity, "sen-completion-refused", at, { detail: transitionError.message }); return; }
   await witness(activity, "contract.completed", at, {
     executionMode: request.executionMode,
     artifactProfile: request.artifact.profile,

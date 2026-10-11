@@ -1,0 +1,27 @@
+{
+  "name": "@red-cup-engineering/cloudflare-d1-service",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The Cloudflare D1 database handle contract -- prepare/bind/first/all/run/batch/exec -- with a local node:sqlite double and a migration applier, so Assist and every other Workers application store composes one D1 shape on the platform and in tests.",
+  "exports": {
+    "./sqlite": "./src/sqlite-d1.mjs",
+    "./migrations": "./src/apply-migrations.mjs",
+    "./package.json": "./package.json",
+    "./sqlite-d1": "./src/sqlite-d1.mjs",
+    "./apply-migrations": "./src/apply-migrations.mjs"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "check": "node --check src/index.mjs && node --check src/sqlite-d1.mjs && node --check src/apply-migrations.mjs && node --check test/sqlite-d1.test.mjs && node --check test/apply-migrations.test.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@red-cup-engineering/computer-filepath-engineering-services-section": "workspace:*",
+    "@red-cup-engineering/computer-file-engineering-services-section": "workspace:*"
+  }
+}

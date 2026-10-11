@@ -1,0 +1,22 @@
+{
+  "name": "@red-cup-engineering/cloudflare-services-section",
+  "version": "0.1.0",
+  "description": "Cloudflare platform services: routing, tunnels, and account inventory for the 561 Group's Cloudflare footprint.",
+  "type": "module",
+  "keywords": [
+    "engineering"
+  ],
+  "exports": {
+    "./index": "./scripts/index.mjs",
+    "./admit-tunnel-token": "./scripts/admit-tunnel-token.mjs",
+    "./verify-cloudflare-ingress": "./scripts/verify-cloudflare-ingress.mjs",
+    "./derive-cloudflare-account-inventory": "./scripts/derive-cloudflare-account-inventory.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@red-cup-engineering/computer-file-engineering-services-section": "workspace:*",
+    "@red-cup-engineering/javascript-node-services-section": "workspace:*"
+  }
+}

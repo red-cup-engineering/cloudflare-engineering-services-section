@@ -5,26 +5,21 @@ import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { startRmnProviderProcess } from "@red-cup-engineering/rmn-semantic-conformance/test-provider";
-import { startWitnessJournalProviderProcess } from "@lenticule-science/witness-journal-rdf-projection-service/test-provider";
-import { startWitTransitionAssayProcess } from "@lenticule-science/wit-transition-assay/test-provider";
+import { startWitnessJournalProviderProcess } from "@red-cup-engineering/witness-journal-document-service/test-provider";
+import { serveWitTransitionAssay } from "@red-cup-engineering/computer-inference-engine/fabric/effect-assay";
 
-let rmnProvider, witnessJournalProvider, witProvider;
+let witnessJournalProvider, witProvider;
 test.before(async () => {
-  rmnProvider = await startRmnProviderProcess();
   witnessJournalProvider = await startWitnessJournalProviderProcess();
-  witProvider = await startWitTransitionAssayProcess({ witnessJournalAgentUrl: witnessJournalProvider.agentCardUrl });
-  process.env.RMN_CONFORMANCE_AGENT = rmnProvider.agentCardUrl;
+  witProvider = await serveWitTransitionAssay({ providerAccount: "eip155:31337:0x0aadad1c6a71d34f89dad0cb41a75603433a6071" });
   process.env.WITNESS_JOURNAL_RDF_AGENT = witnessJournalProvider.agentCardUrl;
-  process.env.WIT_TRANSITION_ASSAY_AGENT = witProvider.agentCardUrl;
+  process.env.WIT_TRANSITION_ASSAY_AGENT = witProvider.baseUrl;
 });
 test.after(async () => {
-  delete process.env.RMN_CONFORMANCE_AGENT;
   delete process.env.WITNESS_JOURNAL_RDF_AGENT;
   delete process.env.WIT_TRANSITION_ASSAY_AGENT;
   await witProvider?.close();
   await witnessJournalProvider?.close();
-  await rmnProvider?.close();
 });
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -51,16 +46,16 @@ function invocation(offer) {
   return { "@context": CONTEXT, id: "urn:test:attention:invocation", type: "Accept", actor: CUSTOMER, target: ACTOR, object: { type: "ServiceContract", contract: offer.object.contract, offer, bindings: offer.object.bindings } };
 }
 function run(operation, activity, root, extraEnv = {}) {
-  const result = spawnSync(process.execPath, [PROVIDER, "--operation", operation, "--now", NOW, "--witness-journal-data-root", join(root, "witnessJournal")], {
+  const result = spawnSync(process.execPath, [...process.execArgv.filter((flag) => !flag.startsWith("--test")), PROVIDER, "--operation", operation, "--now", NOW, "--witness-journal-data-root", join(root, "witnessJournal")], {
     input: JSON.stringify(activity),
     encoding: "utf8",
-    env: { ...process.env, RESOURCE_BROKERAGE_TEAM_DATA_ROOT: join(root, "data"), RMN_SEMANTIC_CONFORMANCE_DATA_ROOT: join(root, "rmn"), CLOUDFLARE_PRIMARY_RELEASE_CREDENTIAL_FILE: join(root, "absent-cloudflare-resource.env"), ...extraEnv }
+    env: { ...process.env, RESOURCE_BROKERAGE_TEAM_DATA_ROOT: join(root, "data"), SEN_SEMANTIC_CONFORMANCE_DATA_ROOT: join(root, "sen"), CLOUDFLARE_PRIMARY_RELEASE_CREDENTIAL_FILE: join(root, "absent-cloudflare-resource.env"), ...extraEnv }
   });
   return { ...result, value: JSON.parse(result.stdout) };
 }
 
 test("attention solicitation requires exact CAIP-10 provider identity before any credential access", () => {
-  const root = mkdtempSync(join(tmpdir(), "attention-rmn-test-"));
+  const root = mkdtempSync(join(tmpdir(), "attention-sen-test-"));
   try {
     const result = run("solicit-attention-service", solicitation("provider-absent"), root);
     assert.equal(result.status, 0);
@@ -69,8 +64,8 @@ test("attention solicitation requires exact CAIP-10 provider identity before any
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test("credential refusal is an RMN negative-evidence cover with one WIT", () => {
-  const root = mkdtempSync(join(tmpdir(), "attention-rmn-test-"));
+test("credential refusal is an SEN negative-evidence cover with one WIT", () => {
+  const root = mkdtempSync(join(tmpdir(), "attention-sen-test-"));
   const env = { RESOURCE_BROKERAGE_PROVIDER_CAIP10: PROVIDER_ACCOUNT };
   try {
     const offered = run("solicit-attention-service", solicitation("credential-refusal"), root, env);

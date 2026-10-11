@@ -6,31 +6,25 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { startRmnProviderProcess } from "@red-cup-engineering/rmn-semantic-conformance/test-provider";
-import { makeNiUri } from "@red-cup-engineering/ni-uri-services-section";
-import { startWitnessJournalProviderProcess } from "@lenticule-science/witness-journal-rdf-projection-service/test-provider";
-import { startWitTransitionAssayProcess } from "@lenticule-science/wit-transition-assay/test-provider";
-import { queryWitnessJournalDocumentsByCategory } from "@lenticule-science/witness-journal-rdf-projection-service/client";
-import { createWitnessJournalDataRootBinding } from "../src/witness-journal-binding.js";
+import { makeNiUri } from "@red-cup-engineering/uri-services-section/ni-uri";
+import { startWitnessJournalProviderProcess } from "@red-cup-engineering/witness-journal-document-service/test-provider";
+import { serveWitTransitionAssay } from "@red-cup-engineering/computer-inference-engine/fabric/effect-assay";
+import { createWitnessJournalDataRootBinding, witnessedBoundaryActs } from "../src/boundary-witness.mjs";
 
-let rmnProvider, witnessJournalProvider, witProvider;
+let witnessJournalProvider, witProvider;
 const rawNi = (bytes) => makeNiUri(Buffer.from(bytes));
 const WITNESS_JOURNAL_DATA_ROOT = mkdtempSync(join(tmpdir(), "resource-brokerage-witness-journal-test-"));
 test.before(async () => {
-  rmnProvider = await startRmnProviderProcess();
   witnessJournalProvider = await startWitnessJournalProviderProcess();
-  witProvider = await startWitTransitionAssayProcess({ witnessJournalAgentUrl: witnessJournalProvider.agentCardUrl });
-  process.env.RMN_CONFORMANCE_AGENT = rmnProvider.agentCardUrl;
+  witProvider = await serveWitTransitionAssay({ providerAccount: "eip155:31337:0x0aadad1c6a71d34f89dad0cb41a75603433a6071" });
   process.env.WITNESS_JOURNAL_RDF_AGENT = witnessJournalProvider.agentCardUrl;
-  process.env.WIT_TRANSITION_ASSAY_AGENT = witProvider.agentCardUrl;
+  process.env.WIT_TRANSITION_ASSAY_AGENT = witProvider.baseUrl;
 });
 test.after(async () => {
-  delete process.env.RMN_CONFORMANCE_AGENT;
   delete process.env.WITNESS_JOURNAL_RDF_AGENT;
   delete process.env.WIT_TRANSITION_ASSAY_AGENT;
   await witProvider?.close();
   await witnessJournalProvider?.close();
-  await rmnProvider?.close();
   rmSync(WITNESS_JOURNAL_DATA_ROOT, { recursive: true, force: true });
 });
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -49,7 +43,7 @@ function treeDigest(root, entries) {
     const bytes = readFileSync(join(root, path));
     return { path: path.split(sep).join("/"), bytes: bytes.length, digest: rawNi(bytes) };
   }).sort((left, right) => left.path.localeCompare(right.path));
-  const rows = files.map((file) => `<urn:path:${encodeURIComponent(file.path)}> <urn:rmn:bytes> ${JSON.stringify(String(file.bytes))}; <urn:rmn:content> <${file.digest}> .`).join("\n");
+  const rows = files.map((file) => `<urn:path:${encodeURIComponent(file.path)}> <urn:sen:bytes> ${JSON.stringify(String(file.bytes))}; <urn:sen:content> <${file.digest}> .`).join("\n");
   return rawNi(Buffer.from(`${rows}\n`, "utf8"));
 }
 function cleanupEvidence() { rmSync(WITNESS_JOURNAL_DATA_ROOT, { recursive: true, force: true }); }
@@ -166,7 +160,7 @@ function run(operation, value, env = {}, now = NOW) {
   const stdoutFd = openSync(stdoutPath, "w+");
   const stderrFd = openSync(stderrPath, "w+");
   try {
-    const result = spawnSync(process.execPath, [PROVIDER, "--operation", operation, "--now", now, "--witness-journal-data-root", WITNESS_JOURNAL_DATA_ROOT], {
+    const result = spawnSync(process.execPath, [...process.execArgv.filter((flag) => !flag.startsWith("--test")), PROVIDER, "--operation", operation, "--now", now, "--witness-journal-data-root", WITNESS_JOURNAL_DATA_ROOT], {
       env: processEnv,
       stdio: [inputFd, stdoutFd, stderrFd],
     });
@@ -262,8 +256,8 @@ test("dry-run offer executes the pinned Wrangler package without credentials or 
     assert.match(result.object.effect.witness, /^ni:\/\/\/sha-256;/u);
     assert.equal(existsSync(found.marker), false);
 
-    const evidence = await queryWitnessJournalDocumentsByCategory("resource-brokerage.boundary-act", createWitnessJournalDataRootBinding(WITNESS_JOURNAL_DATA_ROOT));
-    assert.equal(evidence.some(({ value }) => value?.outcome === "contract.completed"), true);
+    const evidence = witnessedBoundaryActs(createWitnessJournalDataRootBinding(WITNESS_JOURNAL_DATA_ROOT));
+    assert.equal(evidence.some(({ outcome }) => outcome === "contract.completed"), true);
     assert.equal(JSON.stringify(evidence).includes("must-not-reach-dry-run"), false);
   } finally { rmSync(found.root, { recursive: true, force: true }); }
 });
@@ -354,7 +348,7 @@ test("live preview refuses effect-cell commitment drift before starting Wrangler
     const refusal = JSON.parse(invoked.stdout);
     assert.equal(refusal.type, "Reject");
     assert.equal(refusal.object.reason, "effect-commitment-drift");
-    assert.deepEqual(refusal.object.unmet, ["accepted-rmn-effect"]);
+    assert.deepEqual(refusal.object.unmet, ["accepted-sen-effect"]);
     assert.equal(refusal.object.networkCalls, 0);
     assert.equal(refusal.object.subprocessesStarted, 0);
     assert.equal(existsSync(found.marker), false);

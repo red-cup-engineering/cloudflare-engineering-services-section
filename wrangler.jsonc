@@ -1,0 +1,33 @@
+{
+  "name": "cloudflare-router-561-group",
+  "main": "scripts/index.mjs",
+  "compatibility_date": "2026-08-04",
+  "account_id": "337e54ee6dc7d488933f473204a6d89e",
+  "routes": [
+    {
+      "pattern": "ruinfold.561.group",
+      "custom_domain": true
+    },
+    {
+      "pattern": "durante.561.group",
+      "custom_domain": true
+    },
+    {
+      "pattern": "aletheon.561.group",
+      "custom_domain": true
+    },
+    {
+      "pattern": "casino.561.group",
+      "custom_domain": true
+    },
+    {
+      "pattern": "flickering.561.group",
+      "custom_domain": true
+    },
+    {
+      "pattern": "onestone.561.group",
+      "custom_domain": true
+    }
+  ],
+  "compatibility_flags": []
+}
