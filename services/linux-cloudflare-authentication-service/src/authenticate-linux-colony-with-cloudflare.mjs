@@ -8,7 +8,7 @@ import {
   authorizeCloudflareWithPkce
 } from "./cloudflare-oauth-pkce.mjs";
 import { createWranglerKeyringAuthoritySubstrate } from "./wrangler-keyring-authority-substrate.mjs";
-import { semanticId } from "@red-cup-engineering/computer-content-engineering-services-section/semiotic-content-address";
+import { semanticId } from "@red-cup-engineering/computer-content-address-engineering-services-section/semiotic-content-address";
 
 export const CLOUDFLARE_OAUTH_SCOPES = new Set([
   "account:read",
