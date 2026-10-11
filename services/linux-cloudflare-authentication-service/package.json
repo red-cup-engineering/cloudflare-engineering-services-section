@@ -37,11 +37,11 @@
   },
   "dependencies": {
     "@red-cup-engineering/cbor-services-section": "workspace:*",
-    "@red-cup-engineering/computer-content-engineering-services-section": "workspace:*",
     "@red-cup-engineering/cryptographic-computer-data-engineering-services-section": "workspace:*",
     "@red-cup-engineering/computer-file-engineering-services-section": "workspace:*",
     "@red-cup-engineering/http-services-section": "workspace:*",
-    "wrangler": "4.114.0"
+    "wrangler": "4.114.0",
+    "@red-cup-engineering/computer-content-address-engineering-services-section": "workspace:*"
   },
   "engines": {
     "node": ">=22"
