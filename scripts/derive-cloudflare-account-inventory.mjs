@@ -25,6 +25,60 @@ async function cloudflareGet(fetchImpl, token, path) {
   return { ok: response.ok === true && body?.success === true, body, path };
 }
 
+// List endpoints must finish their advertised page set before claiming coverage.
+// Missing pagination metadata is accepted only for a short final page.
+async function cloudflareList(fetchImpl, token, path, perPage, identity) {
+  const values = [];
+  const seen = new Set();
+  for (let page = 1; page <= 1000; page += 1) {
+    const query = new URLSearchParams(path.split("?")[1] ?? "");
+    query.set("per_page", String(perPage));
+    query.set("page", String(page));
+    const response = await cloudflareGet(fetchImpl, token, `${path.split("?")[0]}?${query}`);
+    if (!response.ok) return refusal("CLOUDFLARE_API_REFUSED", { path: response.path, errors: response.body?.errors ?? [] });
+    const items = response.body?.result;
+    const info = response.body?.result_info;
+    if (!Array.isArray(items) || (info?.page !== undefined && info.page !== page)) {
+      return refusal("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
+    }
+    for (const item of items) {
+      const id = identity(item);
+      if (typeof id !== "string" || id.length === 0 || seen.has(id)) {
+        return refusal("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
+      }
+      seen.add(id);
+      values.push(item);
+    }
+    const actualPerPage = info?.per_page ?? perPage;
+    const totalCount = info?.total_count;
+    if (!Number.isSafeInteger(actualPerPage) || actualPerPage < 1 || actualPerPage > perPage ||
+        (info?.count !== undefined && info.count !== items.length) ||
+        (totalCount !== undefined && (!Number.isSafeInteger(totalCount) || totalCount < values.length))) {
+      return refusal("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
+    }
+    const totalPages = info?.total_pages;
+    if (totalPages !== undefined) {
+      if (!Number.isSafeInteger(totalPages) || totalPages < 0 || totalPages > 1000 ||
+          (totalPages < page && !(page === 1 && totalPages === 0 && items.length === 0)) ||
+          (items.length === 0 && page < totalPages)) {
+        return refusal("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
+      }
+      if (page >= totalPages) {
+        if (totalCount !== undefined && values.length !== totalCount) {
+          return refusal("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
+        }
+        return { values };
+      }
+    } else if (totalCount !== undefined) {
+      if (values.length === totalCount) return { values };
+      if (items.length === 0) return refusal("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
+    } else if (items.length < actualPerPage) {
+      return { values };
+    }
+  }
+  return refusal("CLOUDFLARE_PAGINATION_LIMIT", { path });
+}
+
 function mapDnsRecord(record) {
   return { type: record.type, name: record.name, content: record.content, proxied: record.proxied === true, ttl: record.ttl, id: record.id };
 }
@@ -64,27 +118,32 @@ export async function deriveCloudflareAccountInventory(request) {
   if (!verify.ok) return refusal("CLOUDFLARE_API_REFUSED", { path: verify.path, errors: verify.body?.errors ?? [] });
   const tokenStatus = verify.body.result?.status ?? null;
 
-  const zonesResponse = await cloudflareGet(fetchImpl, token, "/zones?per_page=50");
-  if (!zonesResponse.ok) return refusal("CLOUDFLARE_API_REFUSED", { path: zonesResponse.path, errors: zonesResponse.body?.errors ?? [] });
-  const rawZones = Array.isArray(zonesResponse.body.result) ? zonesResponse.body.result : [];
+  const zonesResponse = await cloudflareList(fetchImpl, token, `/zones?account.id=${accountId}`, 50, zone => zone?.id);
+  if (zonesResponse.type) return zonesResponse;
+  const rawZones = zonesResponse.values;
+  if (rawZones.some(zone => zone.account?.id !== undefined && (typeof zone.account.id !== "string" || zone.account.id.toLowerCase() !== accountId.toLowerCase()))) {
+    return refusal("CLOUDFLARE_ACCOUNT_SCOPE_MISMATCH", { accountId });
+  }
 
   const zones = [];
   let recordCount = 0;
   for (const zone of rawZones) {
-    const recordsResponse = await cloudflareGet(fetchImpl, token, `/zones/${zone.id}/dns_records?per_page=500`);
-    if (!recordsResponse.ok) return refusal("CLOUDFLARE_API_REFUSED", { path: recordsResponse.path, errors: recordsResponse.body?.errors ?? [] });
-    const records = (Array.isArray(recordsResponse.body.result) ? recordsResponse.body.result : []).map(mapDnsRecord);
+    const recordsResponse = await cloudflareList(fetchImpl, token, `/zones/${zone.id}/dns_records`, 500, record => record?.id);
+    if (recordsResponse.type) return recordsResponse;
+    const records = recordsResponse.values.map(mapDnsRecord);
     recordCount += records.length;
     zones.push({ id: zone.id, name: zone.name, status: zone.status, records });
   }
 
   const workersResponse = await cloudflareGet(fetchImpl, token, `/accounts/${accountId}/workers/scripts`);
   if (!workersResponse.ok) return refusal("CLOUDFLARE_API_REFUSED", { path: workersResponse.path, errors: workersResponse.body?.errors ?? [] });
-  const workers = (Array.isArray(workersResponse.body.result) ? workersResponse.body.result : []).map(mapWorkerScript);
+  if (!Array.isArray(workersResponse.body.result)) return refusal("CLOUDFLARE_LIST_INVALID", { path: workersResponse.path });
+  const workers = workersResponse.body.result.map(mapWorkerScript);
 
   const domainsResponse = await cloudflareGet(fetchImpl, token, `/accounts/${accountId}/workers/domains`);
   if (!domainsResponse.ok) return refusal("CLOUDFLARE_API_REFUSED", { path: domainsResponse.path, errors: domainsResponse.body?.errors ?? [] });
-  const customDomains = (Array.isArray(domainsResponse.body.result) ? domainsResponse.body.result : []).map(mapCustomDomain);
+  if (!Array.isArray(domainsResponse.body.result)) return refusal("CLOUDFLARE_LIST_INVALID", { path: domainsResponse.path });
+  const customDomains = domainsResponse.body.result.map(mapCustomDomain);
 
   return Object.freeze({
     type: "CloudflareAccountInventory",

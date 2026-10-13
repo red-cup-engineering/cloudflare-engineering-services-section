@@ -30,7 +30,7 @@ function makeFixtureFetch() {
         result: [{ id: "recB1", type: "CNAME", name: "www.example.org", content: "example.org", proxied: true, ttl: 1 }],
       });
     }
-    if (url.includes("/zones?per_page=50")) {
+    if (new URL(url).pathname.endsWith("/zones")) {
       return jsonResponse(true, {
         success: true,
         result: [
@@ -138,4 +138,118 @@ test("refuses an empty tokenEnvironmentVariable", async () => {
     deriveCloudflareAccountInventory({ accountId: ACCOUNT_ID, tokenEnvironmentVariable: "" }),
     /tokenEnvironmentVariable must be a non-empty string/u,
   );
+});
+
+test("scopes zones to the requested account and receives every zone and DNS page", async () => {
+  process.env.CFINV_TEST_TOKEN = "test-token-value";
+  const seen = [];
+  try {
+    const result = await deriveCloudflareAccountInventory({
+      accountId: ACCOUNT_ID, tokenEnvironmentVariable: "CFINV_TEST_TOKEN",
+      fetch: async (url) => {
+        const request = new URL(url); seen.push(request);
+        const page = Number(request.searchParams.get("page"));
+        if (request.pathname.endsWith("/verify")) return jsonResponse(true, { success: true, result: { status: "active" } });
+        if (request.pathname.endsWith("/zones")) {
+          assert.equal(request.searchParams.get("account.id"), ACCOUNT_ID);
+          return jsonResponse(true, { success: true, result: [{ id: `zone${page}`, name: `zone${page}.test`, account: { id: ACCOUNT_ID } }], result_info: { page, total_pages: 2 } });
+        }
+        if (request.pathname.endsWith("/dns_records")) return jsonResponse(true, { success: true, result: [{ id: `record${page}`, name: "data.test" }], result_info: { page, total_pages: 2 } });
+        return jsonResponse(true, { success: true, result: [] });
+      }
+    });
+    assert.deepEqual(result.counts, { zones: 2, records: 4, workers: 0, customDomains: 0 });
+    assert.equal(seen.filter(url => url.pathname.endsWith("/dns_records")).length, 4);
+  } finally { delete process.env.CFINV_TEST_TOKEN; }
+});
+
+test("refuses inconsistent pagination and other-account zones before inventory acceptance", async () => {
+  process.env.CFINV_TEST_TOKEN = "test-token-value";
+  try {
+    for (const [body, code] of [
+      [{ result: [{ id: "z" }], result_info: { page: 2, total_pages: 2 } }, "CLOUDFLARE_PAGINATION_INVALID"],
+      [{ result: [{ id: "z", account: { id: "0".repeat(32) } }] }, "CLOUDFLARE_ACCOUNT_SCOPE_MISMATCH"],
+      [{ result: [{ id: "z", account: { id: 42 } }] }, "CLOUDFLARE_ACCOUNT_SCOPE_MISMATCH"],
+      [{ result: null }, "CLOUDFLARE_PAGINATION_INVALID"]
+    ]) {
+      const result = await deriveCloudflareAccountInventory({
+        accountId: ACCOUNT_ID, tokenEnvironmentVariable: "CFINV_TEST_TOKEN",
+        fetch: async url => jsonResponse(true, url.includes("/verify") ? { success: true, result: { status: "active" } } : { success: true, ...body })
+      });
+      assert.equal(result.code, code);
+    }
+  } finally { delete process.env.CFINV_TEST_TOKEN; }
+});
+
+test("refuses repeating records rather than counting a repeated page twice", async () => {
+  process.env.CFINV_TEST_TOKEN = "test-token-value";
+  try {
+    const result = await deriveCloudflareAccountInventory({
+      accountId: ACCOUNT_ID, tokenEnvironmentVariable: "CFINV_TEST_TOKEN",
+      fetch: async url => {
+        const request = new URL(url);
+        if (request.pathname.endsWith("/verify")) return jsonResponse(true, { success: true, result: { status: "active" } });
+        return jsonResponse(true, { success: true, result: [{ id: "repeated-zone" }], result_info: { page: Number(request.searchParams.get("page")), total_pages: 2 } });
+      }
+    });
+    assert.equal(result.code, "CLOUDFLARE_PAGINATION_INVALID");
+  } finally { delete process.env.CFINV_TEST_TOKEN; }
+});
+
+test("follows an advertised page size and total count when total_pages is absent", async () => {
+  process.env.CFINV_TEST_TOKEN = "test-token-value";
+  const pages = [];
+  try {
+    const result = await deriveCloudflareAccountInventory({
+      accountId: ACCOUNT_ID, tokenEnvironmentVariable: "CFINV_TEST_TOKEN",
+      fetch: async url => {
+        const request = new URL(url);
+        if (request.pathname.endsWith("/verify")) return jsonResponse(true, { success: true, result: { status: "active" } });
+        if (request.pathname.endsWith("/zones")) {
+          const page = Number(request.searchParams.get("page")); pages.push(page);
+          return jsonResponse(true, { success: true, result: [{ id: `zone${page}` }], result_info: { page, per_page: 1, count: 1, total_count: 2 } });
+        }
+        return jsonResponse(true, { success: true, result: [] });
+      }
+    });
+    assert.equal(result.type, "CloudflareAccountInventory");
+    assert.equal(result.counts.zones, 2);
+    assert.deepEqual(pages, [1, 2]);
+  } finally { delete process.env.CFINV_TEST_TOKEN; }
+});
+
+test("refuses malformed successful Workers and domain lists instead of asserting empty coverage", async () => {
+  process.env.CFINV_TEST_TOKEN = "test-token-value";
+  try {
+    for (const suffix of ["/workers/scripts", "/workers/domains"]) {
+      const result = await deriveCloudflareAccountInventory({
+        accountId: ACCOUNT_ID, tokenEnvironmentVariable: "CFINV_TEST_TOKEN",
+        fetch: async url => {
+          const request = new URL(url);
+          if (request.pathname.endsWith("/verify")) return jsonResponse(true, { success: true, result: { status: "active" } });
+          return jsonResponse(true, { success: true, result: request.pathname.endsWith(suffix) ? null : [] });
+        }
+      });
+      assert.equal(result.type, "CloudflareAccountInventoryRefusal");
+      assert.equal(result.code, "CLOUDFLARE_LIST_INVALID");
+      assert.equal(result.path.endsWith(suffix), true);
+    }
+  } finally { delete process.env.CFINV_TEST_TOKEN; }
+});
+
+test("refuses contradictory list metadata rather than accepting partial coverage", async () => {
+  process.env.CFINV_TEST_TOKEN = "test-token-value";
+  try {
+    for (const result_info of [
+      { page: 1, per_page: 0, total_count: 2 },
+      { page: 1, per_page: 1, count: 0, total_count: 2 },
+      { page: 1, total_pages: 1, total_count: 2 }
+    ]) {
+      const result = await deriveCloudflareAccountInventory({
+        accountId: ACCOUNT_ID, tokenEnvironmentVariable: "CFINV_TEST_TOKEN",
+        fetch: async url => jsonResponse(true, url.includes("/verify") ? { success: true, result: { status: "active" } } : { success: true, result: [{ id: "zone" }], result_info })
+      });
+      assert.equal(result.code, "CLOUDFLARE_PAGINATION_INVALID");
+    }
+  } finally { delete process.env.CFINV_TEST_TOKEN; }
 });
