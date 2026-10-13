@@ -96,3 +96,61 @@ a refusal, not authorization to substitute a paid or VPS target.
   verified reads, and free-tier admission.
 - `services/cloudflare-activitystreams-operation-services-section/` — R2 and
   Worker operations exposed through ActivityStreams adapters.
+
+## Pay Per Crawl receiving
+
+Pay Per Crawl is a separate Cloudflare edge billing protocol from the x402 EVM
+resource boundary. As checked against Cloudflare's documentation on 2026-10-13,
+it is a closed beta. An origin price header alone proves neither enrollment,
+charging configuration nor settlement.
+
+Operate the existing account-owned receiver and credentials. First derive this
+section's account inventory. Zone enumeration is filtered by the requested
+account and follows every advertised zone and DNS page; malformed, repeated or
+incomplete pages refuse the inventory instead of silently accepting partial
+coverage. Its record still describes observed routing, not Pay Per Crawl
+eligibility. Account visibility, Payments settings and crawler actions must be
+observed through the supported Cloudflare controls.
+
+For each owned zone and every property route it covers:
+
+1. An account Administrator or Super Administrator sets the zone's Pay Per Crawl
+   visibility to Visible in Manage Account > Settings. Visibility exposes the
+   controls; it does not enable charging or change security.
+2. In AI Crawl Control > Payments, enable Pay Per Crawl and select the accepted
+   per-crawl price (minimum USD 0.001). Keep crawlers that supply discovery,
+   citations or contracted access on their appropriate Allow terms. Record the
+   selected Charge action separately from WAF and Bot Management: a prior block
+   overrides Charge and prevents paid access.
+3. Keep homepage/navigation, functional APIs and each existing x402 purchase or
+   compute endpoint outside crawl charging through Configuration Rules as
+   appropriate to the owning content terms. Cloudflare always excludes
+   /robots.txt, /sitemap.xml, /security.txt, /.well-known/security.txt and
+   /crawlers.json. Preserve unrelated security rules.
+4. Dynamic pricing requires the zone's Enable dynamic pricing control plus an
+   origin or Worker response carrying crawler-price: USD <decimal>. The incoming
+   cf-pay-per-crawl header identifies protocol=cloudflare and pricing=in-band,
+   zone-default or bypass. Snippets response transformations cannot select an
+   actionable crawl price. This header is an edge pricing input and must never
+   be accepted as x402 payment or a local entitlement.
+5. Retain independent evidence for configuration, actual HTTP 402 discovery,
+   successful charged HTTP 200 delivery and a corresponding Cloudflare charge
+   event. A crawler-price header, deployment job or an origin's successful HTTP
+   response proves none of the later steps. Error responses are not billable.
+6. Reconcile provider events into the customer-owned shared actor/evidence
+   channel using existing semantic record writers. Keep Cloudflare crawl billing
+   distinct from EVM transaction settlement and retain their source identities;
+   do not count an origin request as revenue.
+
+Payout readiness is separate. Cloudflare currently requires a dedicated Stripe
+Connect account created through its dashboard; a pre-existing Stripe account is
+not compatible. Observe an existing connection first. Creating an account,
+onboarding a legal entity or choosing financial terms follows the actual
+customer's authority and is not an inventory or source-repair effect.
+
+Official operating references:
+- https://developers.cloudflare.com/ai-crawl-control/features/pay-per-crawl/what-is-pay-per-crawl/
+- https://developers.cloudflare.com/ai-crawl-control/features/pay-per-crawl/use-pay-per-crawl-as-site-owner/enable-in-account-settings/
+- https://developers.cloudflare.com/ai-crawl-control/features/pay-per-crawl/use-pay-per-crawl-as-site-owner/set-a-pay-per-crawl-price/
+- https://developers.cloudflare.com/ai-crawl-control/features/pay-per-crawl/use-pay-per-crawl-as-site-owner/advanced-configuration/
+- https://developers.cloudflare.com/ai-crawl-control/features/pay-per-crawl/use-pay-per-crawl-as-site-owner/manage-payouts/
