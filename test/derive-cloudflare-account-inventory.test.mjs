@@ -169,6 +169,7 @@ test("refuses inconsistent pagination and other-account zones before inventory a
     for (const [body, code] of [
       [{ result: [{ id: "z" }], result_info: { page: 2, total_pages: 2 } }, "CLOUDFLARE_PAGINATION_INVALID"],
       [{ result: [{ id: "z", account: { id: "0".repeat(32) } }] }, "CLOUDFLARE_ACCOUNT_SCOPE_MISMATCH"],
+      [{ result: [{ id: "z", account: { id: 42 } }] }, "CLOUDFLARE_ACCOUNT_SCOPE_MISMATCH"],
       [{ result: null }, "CLOUDFLARE_PAGINATION_INVALID"]
     ]) {
       const result = await deriveCloudflareAccountInventory({

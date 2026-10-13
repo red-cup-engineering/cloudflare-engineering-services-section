@@ -106,7 +106,7 @@ export async function deriveCloudflareAccountInventory(request) {
   const zonesResponse = await cloudflareList(fetchImpl, token, `/zones?account.id=${accountId}`, 50, zone => zone?.id);
   if (zonesResponse.type) return zonesResponse;
   const rawZones = zonesResponse.values;
-  if (rawZones.some(zone => zone.account?.id !== undefined && zone.account.id.toLowerCase() !== accountId.toLowerCase())) {
+  if (rawZones.some(zone => zone.account?.id !== undefined && (typeof zone.account.id !== "string" || zone.account.id.toLowerCase() !== accountId.toLowerCase()))) {
     return refusal("CLOUDFLARE_ACCOUNT_SCOPE_MISMATCH", { accountId });
   }
 
