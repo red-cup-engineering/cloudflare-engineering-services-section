@@ -195,3 +195,61 @@ test("refuses repeating records rather than counting a repeated page twice", asy
     assert.equal(result.code, "CLOUDFLARE_PAGINATION_INVALID");
   } finally { delete process.env.CFINV_TEST_TOKEN; }
 });
+
+test("follows an advertised page size and total count when total_pages is absent", async () => {
+  process.env.CFINV_TEST_TOKEN = "test-token-value";
+  const pages = [];
+  try {
+    const result = await deriveCloudflareAccountInventory({
+      accountId: ACCOUNT_ID, tokenEnvironmentVariable: "CFINV_TEST_TOKEN",
+      fetch: async url => {
+        const request = new URL(url);
+        if (request.pathname.endsWith("/verify")) return jsonResponse(true, { success: true, result: { status: "active" } });
+        if (request.pathname.endsWith("/zones")) {
+          const page = Number(request.searchParams.get("page")); pages.push(page);
+          return jsonResponse(true, { success: true, result: [{ id: `zone${page}` }], result_info: { page, per_page: 1, count: 1, total_count: 2 } });
+        }
+        return jsonResponse(true, { success: true, result: [] });
+      }
+    });
+    assert.equal(result.type, "CloudflareAccountInventory");
+    assert.equal(result.counts.zones, 2);
+    assert.deepEqual(pages, [1, 2]);
+  } finally { delete process.env.CFINV_TEST_TOKEN; }
+});
+
+test("refuses malformed successful Workers and domain lists instead of asserting empty coverage", async () => {
+  process.env.CFINV_TEST_TOKEN = "test-token-value";
+  try {
+    for (const suffix of ["/workers/scripts", "/workers/domains"]) {
+      const result = await deriveCloudflareAccountInventory({
+        accountId: ACCOUNT_ID, tokenEnvironmentVariable: "CFINV_TEST_TOKEN",
+        fetch: async url => {
+          const request = new URL(url);
+          if (request.pathname.endsWith("/verify")) return jsonResponse(true, { success: true, result: { status: "active" } });
+          return jsonResponse(true, { success: true, result: request.pathname.endsWith(suffix) ? null : [] });
+        }
+      });
+      assert.equal(result.type, "CloudflareAccountInventoryRefusal");
+      assert.equal(result.code, "CLOUDFLARE_LIST_INVALID");
+      assert.equal(result.path.endsWith(suffix), true);
+    }
+  } finally { delete process.env.CFINV_TEST_TOKEN; }
+});
+
+test("refuses contradictory list metadata rather than accepting partial coverage", async () => {
+  process.env.CFINV_TEST_TOKEN = "test-token-value";
+  try {
+    for (const result_info of [
+      { page: 1, per_page: 0, total_count: 2 },
+      { page: 1, per_page: 1, count: 0, total_count: 2 },
+      { page: 1, total_pages: 1, total_count: 2 }
+    ]) {
+      const result = await deriveCloudflareAccountInventory({
+        accountId: ACCOUNT_ID, tokenEnvironmentVariable: "CFINV_TEST_TOKEN",
+        fetch: async url => jsonResponse(true, url.includes("/verify") ? { success: true, result: { status: "active" } } : { success: true, result: [{ id: "zone" }], result_info })
+      });
+      assert.equal(result.code, "CLOUDFLARE_PAGINATION_INVALID");
+    }
+  } finally { delete process.env.CFINV_TEST_TOKEN; }
+});

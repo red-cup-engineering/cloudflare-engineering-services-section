@@ -49,6 +49,13 @@ async function cloudflareList(fetchImpl, token, path, perPage, identity) {
       seen.add(id);
       values.push(item);
     }
+    const actualPerPage = info?.per_page ?? perPage;
+    const totalCount = info?.total_count;
+    if (!Number.isSafeInteger(actualPerPage) || actualPerPage < 1 || actualPerPage > perPage ||
+        (info?.count !== undefined && info.count !== items.length) ||
+        (totalCount !== undefined && (!Number.isSafeInteger(totalCount) || totalCount < values.length))) {
+      return refusal("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
+    }
     const totalPages = info?.total_pages;
     if (totalPages !== undefined) {
       if (!Number.isSafeInteger(totalPages) || totalPages < 0 || totalPages > 1000 ||
@@ -56,8 +63,16 @@ async function cloudflareList(fetchImpl, token, path, perPage, identity) {
           (items.length === 0 && page < totalPages)) {
         return refusal("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
       }
-      if (page >= totalPages) return { values };
-    } else if (items.length < perPage) {
+      if (page >= totalPages) {
+        if (totalCount !== undefined && values.length !== totalCount) {
+          return refusal("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
+        }
+        return { values };
+      }
+    } else if (totalCount !== undefined) {
+      if (values.length === totalCount) return { values };
+      if (items.length === 0) return refusal("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
+    } else if (items.length < actualPerPage) {
       return { values };
     }
   }
@@ -122,11 +137,13 @@ export async function deriveCloudflareAccountInventory(request) {
 
   const workersResponse = await cloudflareGet(fetchImpl, token, `/accounts/${accountId}/workers/scripts`);
   if (!workersResponse.ok) return refusal("CLOUDFLARE_API_REFUSED", { path: workersResponse.path, errors: workersResponse.body?.errors ?? [] });
-  const workers = (Array.isArray(workersResponse.body.result) ? workersResponse.body.result : []).map(mapWorkerScript);
+  if (!Array.isArray(workersResponse.body.result)) return refusal("CLOUDFLARE_LIST_INVALID", { path: workersResponse.path });
+  const workers = workersResponse.body.result.map(mapWorkerScript);
 
   const domainsResponse = await cloudflareGet(fetchImpl, token, `/accounts/${accountId}/workers/domains`);
   if (!domainsResponse.ok) return refusal("CLOUDFLARE_API_REFUSED", { path: domainsResponse.path, errors: domainsResponse.body?.errors ?? [] });
-  const customDomains = (Array.isArray(domainsResponse.body.result) ? domainsResponse.body.result : []).map(mapCustomDomain);
+  if (!Array.isArray(domainsResponse.body.result)) return refusal("CLOUDFLARE_LIST_INVALID", { path: domainsResponse.path });
+  const customDomains = domainsResponse.body.result.map(mapCustomDomain);
 
   return Object.freeze({
     type: "CloudflareAccountInventory",
