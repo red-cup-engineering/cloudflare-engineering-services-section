@@ -4,7 +4,7 @@ const API = "https://api.cloudflare.com/client/v4";
 const ZONE = /^[a-fA-F0-9]{32}$/u;
 const RULE = /^[a-fA-F0-9]{32}$/u;
 
-async function readJson(fetchImpl, url, token, options = {}) {
+async function readJson(fetchImpl, url, token, options = {}, { allowMissingPhase = false } = {}) {
   const response = await fetchImpl(url, {
     ...options, redirect: "error",
     headers: {
@@ -13,8 +13,10 @@ async function readJson(fetchImpl, url, token, options = {}) {
       ...(options.body === undefined ? {} : { "content-type": "application/json" }),
     },
   });
-  // Cloudflare's absent phase ruleset is not a blank ruleset we are entitled
-  // to overwrite. Another controlled installation must establish that phase.
+  // Only an explicit 404 from the caller's exact phase entrypoint can mean
+  // no zone-level configuration ruleset exists. No other resource permits this
+  // interpretation; access-denied, network and malformed responses still fail.
+  if (allowMissingPhase && response.status === 404) return null;
   if (!response.ok) throw new Error(`Cloudflare rule receiving refused: HTTP ${response.status}`);
   const data = await response.json();
   if (data?.success !== true || !data.result || !Array.isArray(data.errors)) {
@@ -75,7 +77,31 @@ export async function receivePayPerCrawlExclusion({
     throw new TypeError("Cloudflare zone identifier and zone name disagree with owner authority");
   }
   const entry = `${path}/rulesets/phases/http_config_settings/entrypoint`;
-  const before = await readJson(fetchImpl, entry, token);
+  const before = await readJson(fetchImpl, entry, token, {}, { allowMissingPhase: true });
+  if (before === null) {
+    // Cloudflare's Rulesets API officially supports creating a zone phase
+    // entrypoint with POST /zones/{id}/rulesets, kind:"zone", phase. This
+    // is the only missing-phase mutation: never PUT a whole existing ruleset.
+    if (!apply) return stage({ id: null, version: null, rules: [] }, candidate,
+      zoneId, zoneName, "phase-create-required");
+    await readJson(fetchImpl, `${path}/rulesets`, token, {
+      method: "POST",
+      body: JSON.stringify({
+        name: "561 Group agent API crawl exclusions",
+        kind: "zone", phase: "http_config_settings",
+        rules: [candidate.rule],
+      }),
+    });
+    const installed = await readJson(fetchImpl, entry, token);
+    const matching = installed.rules?.filter(row => row.ref === candidate.rule.ref);
+    if (!RULE.test(installed.id ?? "") ||
+        installed.phase !== "http_config_settings" ||
+        !Array.isArray(installed.rules) || matching?.length !== 1 ||
+        !sameRule(matching[0], candidate.rule)) {
+      throw new Error("Cloudflare newly created configuration phase failed independent readback");
+    }
+    return stage(installed, candidate, zoneId, zoneName, "received");
+  }
   if (!RULE.test(before.id ?? "") || before.phase !== "http_config_settings" ||
       !Array.isArray(before.rules)) {
     throw new TypeError("Cloudflare existing configuration ruleset is not an admitted phase");
