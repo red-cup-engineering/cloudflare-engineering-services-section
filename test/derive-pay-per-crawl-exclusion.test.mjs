@@ -51,3 +51,40 @@ test("only one exact HTTPS site, owned paths and real seller rows enter the expr
     assert.throws(() => derivePayPerCrawlExclusion({origin,catalog,apiPrefix:"/v1/",freePaths,...untrusted}), TypeError);
   }
 });
+
+test("nonmarket science properties use the same exclusion compiler without inventing a merchant", () => {
+  const site = { origin: "https://science.561.group",
+    freePaths: ["/", "/search", "/.well-known/", "/api/"] };
+  const result = derivePayPerCrawlExclusion(site);
+  assert.equal(result.type, "CloudflarePayPerCrawlExclusionCandidate");
+  assert.equal(result.source, "site-owned-free-route-policy");
+  assert.equal(result.catalogOfferCount, 0);
+  assert.equal(result.rule.ref, "ppc_free_science_561_group");
+  assert.equal(result.rule.action, "set_config");
+  assert.deepEqual(result.rule.action_parameters, { disable_pay_per_crawl: true });
+  assert.match(result.rule.expression, /http\.host eq "science\.561\.group"/u);
+  assert.match(result.rule.expression, /starts_with\(http\.request\.uri\.path, "\/api\/"\)/u);
+  assert.match(result.rule.expression, /http\.request\.uri\.path eq "\/search"/u);
+  assert.ok(!result.rule.expression.includes("/v1/"));
+  assert.deepEqual(derivePayPerCrawlExclusion({
+    ...site, freePaths: [...site.freePaths].reverse(),
+  }), result, "same policy gives one deterministic rule");
+  assert.equal(result.providerInstalled, false);
+  assert.equal(result.independentlyReceived, false);
+});
+
+test("nonmarket site policy must be explicit and cannot smuggle a fabricated seller or unsafe path", () => {
+  const site = { origin: "https://engineering.561.group", freePaths: ["/"] };
+  for (const bad of [
+    { freePaths: [] },
+    { apiPrefix: "/v1/" },
+    { catalog: {market: site.origin, offers: []}, apiPrefix: "/v1/" },
+    { freePaths: ["/", "//evil"] },
+    { freePaths: ["/", "/api/../private"] },
+    { freePaths: ["/", "/mcp\" or true or \""] },
+    { origin: "http://engineering.561.group" },
+    { origin: "https://user:password@engineering.561.group" },
+  ]) {
+    assert.throws(() => derivePayPerCrawlExclusion({...site, ...bad}), TypeError);
+  }
+});
