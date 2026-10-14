@@ -27,8 +27,12 @@ const call=fetch=>deriveCloudflareWorkerStorageBindings({accountId,tokenEnvironm
 test('real Cloudflare script Settings shape receives responsible KV, DO, R2 Worker bindings',async()=>{
   const {fetch,calls}=mock([{id:'site-a'},{id:'api-b'}],{
     'site-a':{bindings:[{name:'KV',type:'kv_namespace',namespace_id:'kv-A'},
-      {name:'R2',type:'r2_bucket',bucket_name:'data'},{name:'TEXT',type:'plain_text',text:'private-value'}]},
-    'api-b':{bindings:[{name:'DO',type:'durable_object_namespace',class_name:'Thing'}]},
+      {name:'R2',type:'r2_bucket',bucket_name:'data',jurisdiction:'eu'},
+      {name:'DB',type:'d1',database_id:'d1-123'},
+      {name:'MESSAGES',type:'queue',queue_name:'incoming-work'},
+      {name:'TEXT',type:'plain_text',text:'private-value'}]},
+    'api-b':{bindings:[{name:'DO',type:'durable_object_namespace',class_name:'Thing',
+      script_name:'stateful-owner',environment:'production'}]},
   });
   const out=await withToken(()=>call(fetch));
   assert.equal(out.type,'CloudflareWorkerStorageBindingObservation');
@@ -36,16 +40,41 @@ test('real Cloudflare script Settings shape receives responsible KV, DO, R2 Work
   assert.equal(out.settingsObserved,2);
   assert.equal(out.complete,true);
   assert.deepEqual(out.storageBindings,[
-    {worker:'api-b',status:'observed',bindings:[{type:'durable_object_namespace',namespaceId:null}]},
+    {worker:'api-b',status:'observed',bindings:[
+      {type:'durable_object_namespace',bindingName:'DO',namespaceId:null,className:'Thing',
+        scriptName:'stateful-owner',environment:'production'}]},
     {worker:'site-a',status:'observed',bindings:[
-      {type:'kv_namespace',namespaceId:'kv-A'},
-      {type:'r2_bucket',namespaceId:null}]},
+      {type:'kv_namespace',bindingName:'KV',namespaceId:'kv-A'},
+      {type:'r2_bucket',bindingName:'R2',namespaceId:null,bucketName:'data',jurisdiction:'eu'},
+      {type:'d1',bindingName:'DB',namespaceId:null,databaseId:'d1-123'},
+      {type:'queue',bindingName:'MESSAGES',namespaceId:null,queueName:'incoming-work'}]},
   ]);
   assert.equal(out.currentOperationUsage,'unknown');
   assert.equal(out.freeTierHeadroom,'unknown');
   assert.equal(calls.length,3);
   assert.ok(calls.every(x=>x.method==='GET'));
   assert.doesNotMatch(JSON.stringify(out),/fixture-internal-secret|private-value|private-provider-reason/);
+});
+
+test('missing or duplicate storage references keep the Worker settings explicitly unread',async()=>{
+  for(const bindings of [
+    [{name:'R2',type:'r2_bucket'}],
+    [{name:'DB',type:'d1',database_id:''}],
+    [{name:'Q',type:'queue',queue_name:null}],
+    [{name:'KV',type:'kv_namespace'}],
+    [{name:'DO',type:'durable_object_namespace'}],
+    [{name:'R2',type:'r2_bucket',bucket_name:'one'},
+     {name:'R2',type:'r2_bucket',bucket_name:'two'}],
+  ]){
+    const {fetch}=mock([{id:'stateful-worker'}],{
+      'stateful-worker':{bindings},
+    });
+    const result=await withToken(()=>call(fetch));
+    assert.equal(result.complete,false);
+    assert.equal(result.settingsObserved,0);
+    assert.deepEqual(result.unread,[{worker:'stateful-worker',status:'invalid-settings'}]);
+    assert.deepEqual(result.storageBindings,[]);
+  }
 });
 
 test('denied individual Worker settings do not turn into false zero-storage claim',async()=>{

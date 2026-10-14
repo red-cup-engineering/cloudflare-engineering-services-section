@@ -36,6 +36,25 @@ Page Rules; use supported Configuration Rules for the market's hostname rule.
 
 ## Holdings
 
+## Observing Worker storage responsibility
+
+The existing `./derive-cloudflare-account-inventory` reader also exposes
+`deriveCloudflareWorkerStorageBindings({accountId,tokenEnvironmentVariable})`.
+The script-and-version settings GET enumerates per-Worker KV, Durable Object,
+R2, D1 and Queue bindings as resource incidences, using the **real provider**
+namespace ID, class/script identity, bucket name and jurisdiction, database ID
+or queue name as appropriate. The projection includes the Worker's binding
+variable name but never environment contents, plaintext/secret bindings or
+account credentials. An incomplete identity, duplicate binding, unread settings
+or incomplete Worker listing is **not** a complete or empty inventory.
+
+The operation is a read-only account observation, not a cross-cloud machine
+catalog, free-tier balance, storage-object listing, ownership claim, or right
+to sell. Its outputs must be consumed by the existing resource-allocation and
+economic-receiving owners with separate current quota, authority and cost evidence.
+The API path is the [Cloudflare Worker script-and-version settings GET](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/);
+the per-type identity fields come from its published Workers binding model.
+
 ## Free-first public receiver procedure
 
 Cloudflare Worker Assets is the presently demonstrated free-cloud receiver for

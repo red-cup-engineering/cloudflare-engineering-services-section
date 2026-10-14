@@ -260,9 +260,41 @@ export async function deriveCloudflareWorkerStorageBindings(request) {
           return {worker:id,status:"invalid-settings"};
         const selected=bindings.filter(b=>
           ["kv_namespace","durable_object_namespace","r2_bucket","d1","queue"].includes(b.type));
-        return {worker:id,status:"observed",bindings:selected.map(b=>({
-          type:b.type,namespaceId:typeof b.namespace_id==="string"?b.namespace_id:null,
-        }))};
+        // Read the provider's actual typed resource reference, not only a KV
+        // namespace field. Every projected binding must have one resource identity.
+        // Environment values, tokens and arbitrary provider metadata are excluded.
+        const nonempty=value=>typeof value==="string"&&value.length>0;
+        const project=b=>{
+          if(!nonempty(b.name))return null;
+          const common={type:b.type,bindingName:b.name,
+            namespaceId:nonempty(b.namespace_id)?b.namespace_id:null};
+          switch(b.type){
+            case "kv_namespace":
+              return nonempty(b.namespace_id)?common:null;
+            case "durable_object_namespace":
+              if(![b.namespace_id,b.class_name,b.dispatch_namespace].some(nonempty))return null;
+              return {...common,
+                ...(nonempty(b.class_name)?{className:b.class_name}:{}),
+                ...(nonempty(b.script_name)?{scriptName:b.script_name}:{}),
+                ...(nonempty(b.environment)?{environment:b.environment}:{}),
+                ...(nonempty(b.dispatch_namespace)?{dispatchNamespace:b.dispatch_namespace}:{})};
+            case "r2_bucket":
+              return nonempty(b.bucket_name)?{...common,bucketName:b.bucket_name,
+                ...(nonempty(b.jurisdiction)?{jurisdiction:b.jurisdiction}:{})}:null;
+            case "d1":
+              return nonempty(b.database_id)?{...common,databaseId:b.database_id}:null;
+            case "queue":
+              return nonempty(b.queue_name)?{...common,queueName:b.queue_name}:null;
+            default:return null;
+          }
+        };
+        const projected=selected.map(project);
+        // A malformed or duplicate provider resource is unknown, not empty.
+        // Do not let a partial settings read certify a stateless Worker.
+        if(projected.some(b=>b===null)||
+           new Set(projected.map(b=>b.bindingName)).size!==projected.length)
+          return {worker:id,status:"invalid-settings"};
+        return {worker:id,status:"observed",bindings:projected};
       }catch{return {worker:id,status:"provider-unavailable"};}
     }));
     reads.push(...batch);
