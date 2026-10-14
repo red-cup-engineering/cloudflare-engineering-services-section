@@ -142,3 +142,30 @@ test("nonexistent phase is the only allowed absence: malformed zone/API errors a
   await assert.rejects(receivePayPerCrawlExclusion({...options,apply:true,fetchImpl:fake}),/HTTP 403/u);
   assert.equal(calls.filter(x=>x.method!=="GET").length,0);
 });
+
+test("content-only science site uses the same Cloudflare receiver, without a seller or paid crawler activation", async () => {
+  const science = {
+    origin: "https://science.561.group",
+    freePaths: ["/", "/.well-known/", "/search", "/api/"],
+    zoneId, zoneName, token,
+  };
+  const p = fakeProvider({ current: [other] });
+  const dry = await receivePayPerCrawlExclusion({ ...science, fetchImpl: p.fetchImpl });
+  assert.equal(dry.status, "change-required");
+  assert.equal(dry.source, "site-owned-free-route-policy");
+  assert.equal(dry.catalogOfferCount, 0);
+  assert.equal(dry.ruleRef, "ppc_free_science_561_group");
+  assert.equal(p.calls.filter(x => x.method !== "GET").length, 0);
+  const applied = await receivePayPerCrawlExclusion({ ...science, apply: true, fetchImpl: p.fetchImpl });
+  assert.equal(applied.status, "received");
+  assert.equal(applied.ruleId, ruleId);
+  assert.equal(applied.ppcChargingEnabled, "unassayed");
+  assert.equal(applied.ppcPayoutReceived, false);
+  assert.equal(p.calls.filter(x => x.method === "POST").length, 1);
+  assert.equal(p.calls.some(x => x.method === "PUT"), false);
+  assert.deepEqual(p.rules[0], other);
+  const newRule = p.rules.find(x => x.ref === applied.ruleRef);
+  assert.ok(newRule);
+  assert.match(newRule.expression, /http\.host eq "science\.561\.group"/u);
+  assert.ok(!newRule.expression.includes("/v1/"));
+});
