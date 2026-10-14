@@ -99,6 +99,10 @@ a refusal, not authorization to substitute a paid or VPS target.
 
 ## Pay Per Crawl receiving
 
+The existing `./pay-per-crawl-exclusion` export derives the market's free-API exception directly from its admitted seller readout. `./receive-pay-per-crawl-exclusion` is the **only effectful receiver**: it checks zone ID and name, reads the existing `http_config_settings` phase, adds or patches only the named rule, then reads back the independently installed rule. It refuses an absent phase or drift; it never `PUT`s a whole ruleset, edits unrelated rules, enables charging, changes crawler policy, or claims payout. Default `apply:false` only reports required change. Scoped `CLOUDFLARE_API_TOKEN` comes from this section's existing short-lived token-custody mechanism; no token is persisted in the receipt. The consumer is `causeway-services/market.561.group`, through `npm run receive:crawler-exemptions` (read-only) or `-- --apply` (rule mutation). Account/zone beta eligibility, charging configuration and actual Stripe payouts require separate independent receiving.
+
+
+
 Pay Per Crawl is a separate Cloudflare edge billing protocol from the x402 EVM
 resource boundary. As checked against Cloudflare's documentation on 2026-10-13,
 it is a closed beta. An origin price header alone proves neither enrollment,
