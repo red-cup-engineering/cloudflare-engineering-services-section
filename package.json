@@ -10,7 +10,8 @@
     "./index": "./scripts/index.mjs",
     "./admit-tunnel-token": "./scripts/admit-tunnel-token.mjs",
     "./verify-cloudflare-ingress": "./scripts/verify-cloudflare-ingress.mjs",
-    "./derive-cloudflare-account-inventory": "./scripts/derive-cloudflare-account-inventory.mjs"
+    "./derive-cloudflare-account-inventory": "./scripts/derive-cloudflare-account-inventory.mjs",
+    "./pay-per-crawl-exclusion": "./scripts/derive-pay-per-crawl-exclusion.mjs"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs"
