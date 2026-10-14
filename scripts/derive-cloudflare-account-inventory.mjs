@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { runJavascriptNodeOperation } from "@red-cup-engineering/javascript-node-services-section/operation";
 const API_BASE = "https://api.cloudflare.com/client/v4";
 const ACCOUNT_ID_PATTERN = /^[0-9a-f]{32}$/iu;
 
@@ -212,7 +211,77 @@ export async function observeCloudflareBuildMinutes(request) {
   });
 }
 
+
+/** Native Workers script → storage binding incidence, for tracing KV / DO /
+ * R2 usage to its accountable producer. No storage contents or Worker source
+ * code is requested. Bindings are provider-owned projections, not a second
+ * machine registry and not evidence of current operations or spend.
+ */
+export async function deriveCloudflareWorkerStorageBindings(request) {
+  requireObject(request,"request");
+  const accountId=requireNonEmptyString(request.accountId,"request.accountId");
+  if(!ACCOUNT_ID_PATTERN.test(accountId))
+    throw new TypeError("cloudflare worker bindings require an exact account identifier");
+  const tokenEnvironmentVariable=requireNonEmptyString(
+    request.tokenEnvironmentVariable,"request.tokenEnvironmentVariable");
+  const token=process.env[tokenEnvironmentVariable];
+  if(typeof token!=="string"||!token.length)
+    return refusal("TOKEN_ENVIRONMENT_VARIABLE_UNSET",{tokenEnvironmentVariable});
+  const sourceFetch=request.fetch??fetch;
+  const boundedFetch=(url,options)=>sourceFetch(url,{
+    ...options,signal:AbortSignal.timeout(10000),
+  });
+  let scriptsResponse;
+  try {scriptsResponse=await cloudflareGet(boundedFetch,token,`/accounts/${accountId}/workers/scripts`);}
+  catch {return refusal("CLOUDFLARE_WORKER_BINDING_READ_UNAVAILABLE",{stage:"list-workers"});}
+  if(!scriptsResponse.ok)
+    return refusal("CLOUDFLARE_WORKER_BINDING_READ_UNAVAILABLE",{stage:"list-workers"});
+  const scripts=scriptsResponse.body?.result,info=scriptsResponse.body?.result_info;
+  if(!Array.isArray(scripts)||scripts.length>150||
+      (info?.total_count!==undefined&&info.total_count!==scripts.length)||
+      (info?.total_pages!==undefined&&info.total_pages>1))
+    return refusal("CLOUDFLARE_WORKER_BINDING_COVERAGE_INCOMPLETE",{stage:"list-workers"});
+  const ids=scripts.map(script=>script?.id);
+  if(ids.some(id=>typeof id!=="string"||!/^[a-z0-9_.-]{1,128}$/iu.test(id))
+      ||new Set(ids).size!==ids.length)
+    return refusal("CLOUDFLARE_WORKER_BINDING_COVERAGE_INCOMPLETE",{stage:"worker-identities"});
+  const reads=[];
+  // Six bounded concurrent native GETs; total requests cannot exceed the
+  // authenticated list's current 150 scripts, and no write route is called.
+  for(let i=0;i<ids.length;i+=6){
+    const batch=await Promise.all(ids.slice(i,i+6).map(async id=>{
+      try{
+        const item=await cloudflareGet(boundedFetch,token,
+          `/accounts/${accountId}/workers/scripts/${encodeURIComponent(id)}/settings`);
+        if(!item.ok)return {worker:id,status:"provider-refusal"};
+        const bindings=item.body?.result?.bindings;
+        if(!Array.isArray(bindings)||bindings.some(x=>!x||typeof x!=="object"
+            ||typeof x.type!=="string"))
+          return {worker:id,status:"invalid-settings"};
+        const selected=bindings.filter(b=>
+          ["kv_namespace","durable_object_namespace","r2_bucket","d1","queue"].includes(b.type));
+        return {worker:id,status:"observed",bindings:selected.map(b=>({
+          type:b.type,namespaceId:typeof b.namespace_id==="string"?b.namespace_id:null,
+        }))};
+      }catch{return {worker:id,status:"provider-unavailable"};}
+    }));
+    reads.push(...batch);
+  }
+  const unread=reads.filter(r=>r.status!=="observed").map(r=>({worker:r.worker,status:r.status}));
+  const bound=reads.filter(r=>r.status==="observed"&&r.bindings.length>0);
+  return Object.freeze({
+    type:"CloudflareWorkerStorageBindingObservation",
+    observedAt:new Date().toISOString(),accountId,source:"Cloudflare Workers Script Version Settings",
+    scriptsEnumerated:ids.length,settingsObserved:reads.length-unread.length,
+    complete:unread.length===0,unread,
+    storageBindings:bound.sort((a,b)=>a.worker.localeCompare(b.worker)),
+    // This is a binding graph, NOT a provider operation quota or billing reading.
+    currentOperationUsage:"unknown",freeTierHeadroom:"unknown",
+  });
+}
+
 if (import.meta.main) {
+  const { runJavascriptNodeOperation } = await import("@red-cup-engineering/javascript-node-services-section/operation");
   const result = await runJavascriptNodeOperation({ name: "derive-cloudflare-account-inventory", description: "Derives one CloudflareAccountInventory record -- zones, their DNS records, Workers scripts, and Workers custom domains -- for one Cloudflare account, reading the API token from the named environment variable and refusing rather than throwing on an unset token or a non-success API body.", operation: deriveCloudflareAccountInventory }, { arguments: process.argv.slice(2), standardInput: process.stdin, standardOutput: process.stdout });
   process.exitCode = result.exitCode;
 }
