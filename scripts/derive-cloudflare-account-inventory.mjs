@@ -280,6 +280,70 @@ export async function deriveCloudflareWorkerStorageBindings(request) {
   });
 }
 
+/**
+ * The Cloudflare account's actual R2 bucket holdings, read through the same
+ * scoped provider credential boundary as its native Worker observations.
+ * This is a STORAGE-CARRIER inventory, not an object, license or sale catalog:
+ * listing a bucket does not grant rights to publish/resell its contents.
+ *
+ * R2 uses cursor pagination, unlike Zones' page-number pagination. No output
+ * on partial coverage is permitted to masquerade as an empty bucket account.
+ */
+export async function observeCloudflareR2Buckets(request) {
+  requireObject(request,"request");
+  const accountId=requireNonEmptyString(request.accountId,"request.accountId");
+  if(!ACCOUNT_ID_PATTERN.test(accountId))throw new TypeError("R2 account id must be exact");
+  const tokenEnvironmentVariable=requireNonEmptyString(
+    request.tokenEnvironmentVariable,"request.tokenEnvironmentVariable");
+  const token=process.env[tokenEnvironmentVariable];
+  if(typeof token!=="string"||!token.length)
+    return refusal("TOKEN_ENVIRONMENT_VARIABLE_UNSET",{tokenEnvironmentVariable});
+  const sourceFetch=request.fetch??fetch;
+  const bounded=(url,options)=>sourceFetch(url,{
+    ...options,signal:AbortSignal.timeout(10000),
+  });
+  const buckets=[],names=new Set(),cursors=new Set();
+  let cursor;
+  for(let page=0;page<100;page++){
+    const path=`/accounts/${accountId}/r2/buckets`
+      +(cursor===undefined?"":`?cursor=${encodeURIComponent(cursor)}`);
+    let reply;
+    try{reply=await cloudflareGet(bounded,token,path);}
+    catch{return refusal("CLOUDFLARE_R2_BUCKET_COVERAGE_UNAVAILABLE",{reason:"provider-transport"});}
+    if(!reply.ok)
+      return refusal("CLOUDFLARE_R2_BUCKET_COVERAGE_UNAVAILABLE",{reason:"native-provider-refusal"});
+    const rows=reply.body?.result?.buckets,next=reply.body?.result_info?.cursor;
+    if(!Array.isArray(rows)||rows.length>1000||buckets.length+rows.length>4096
+        ||(next!==undefined&&next!==null&&(typeof next!=="string"||!next)))
+      return refusal("CLOUDFLARE_R2_BUCKET_COVERAGE_INVALID",{reason:"native-response-shape"});
+    for(const bucket of rows){
+      const name=bucket?.name;
+      if(typeof name!=="string"||!/^[a-z0-9][a-z0-9-]{2,62}$/u.test(name)||names.has(name))
+        return refusal("CLOUDFLARE_R2_BUCKET_COVERAGE_INVALID",{reason:"duplicate-or-invalid-bucket"});
+      names.add(name);
+      buckets.push({
+        name,
+        jurisdiction:typeof bucket.jurisdiction==="string"?bucket.jurisdiction:null,
+        location:typeof bucket.location==="string"?bucket.location:null,
+        storageClass:typeof bucket.storage_class==="string"?bucket.storage_class:null,
+        createdAt:typeof bucket.creation_date==="string"?bucket.creation_date:null,
+      });
+    }
+    if(next===undefined||next===null||next===""){
+      return Object.freeze({
+        type:"CloudflareR2BucketObservation",accountId,
+        observedAt:new Date().toISOString(),coverage:"complete",
+        buckets:Object.freeze(buckets),rightsToResell:"unverified",
+        objectInventory:"unobserved",quotaHeadroom:"unobserved",billing:"unobserved",
+      });
+    }
+    if(cursors.has(next))
+      return refusal("CLOUDFLARE_R2_BUCKET_COVERAGE_INVALID",{reason:"repeated-cursor"});
+    cursors.add(next);cursor=next;
+  }
+  return refusal("CLOUDFLARE_R2_BUCKET_COVERAGE_INVALID",{reason:"page-limit"});
+}
+
 if (import.meta.main) {
   const { runJavascriptNodeOperation } = await import("@red-cup-engineering/javascript-node-services-section/operation");
   const result = await runJavascriptNodeOperation({ name: "derive-cloudflare-account-inventory", description: "Derives one CloudflareAccountInventory record -- zones, their DNS records, Workers scripts, and Workers custom domains -- for one Cloudflare account, reading the API token from the named environment variable and refusing rather than throwing on an unset token or a non-success API body.", operation: deriveCloudflareAccountInventory }, { arguments: process.argv.slice(2), standardInput: process.stdin, standardOutput: process.stdout });
