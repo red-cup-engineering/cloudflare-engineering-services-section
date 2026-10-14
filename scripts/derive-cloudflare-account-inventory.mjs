@@ -158,6 +158,60 @@ export async function deriveCloudflareAccountInventory(request) {
   });
 }
 
+
+/**
+ * Read the *native account* Workers Builds exhaustion signal with an already
+ * admitted user-scoped Workers CI Read token. This is not the general Worker,
+ * KV or R2 allowance, not an estimated number of unused build minutes, and
+ * not a billing receipt. Incomplete or denied scope remains UNKNOWN.
+ */
+export async function observeCloudflareBuildMinutes(request) {
+  requireObject(request, "request");
+  const accountId = requireNonEmptyString(request.accountId, "request.accountId");
+  if (!ACCOUNT_ID_PATTERN.test(accountId)) {
+    throw new TypeError("Cloudflare build observation needs an exact account id");
+  }
+  const tokenEnvironmentVariable = requireNonEmptyString(request.tokenEnvironmentVariable, "request.tokenEnvironmentVariable");
+  const token = process.env[tokenEnvironmentVariable];
+  if (typeof token !== "string" || !token.length) {
+    return refusal("TOKEN_ENVIRONMENT_VARIABLE_UNSET", { tokenEnvironmentVariable });
+  }
+  let observation;
+  try {
+    observation = await cloudflareGet((url, options) => (request.fetch ?? fetch)(url, {
+      ...options, signal: AbortSignal.timeout(15_000),
+    }), token, `/accounts/${accountId}/builds/account/limits`);
+  } catch {
+    return refusal("CLOUDFLARE_BUILD_LIMIT_UNAVAILABLE", { reason: "transport-error" });
+  }
+  if (!observation.ok) {
+    // Workers Builds requires Workers CI Read on a supported user token; the
+    // account-scoped inventory token may legitimately lack that permission.
+    return refusal("CLOUDFLARE_BUILD_LIMIT_UNAVAILABLE", { reason: "provider-refusal" });
+  }
+  const result = observation.body?.result;
+  if (!result || typeof result !== "object" || Array.isArray(result)) {
+    return refusal("CLOUDFLARE_BUILD_LIMIT_INVALID", { reason: "missing-result" });
+  }
+  const reached = result.has_reached_build_minutes_limit;
+  const refresh = result?.build_minutes_refresh_on;
+  if (reached !== undefined && typeof reached !== "boolean") {
+    return refusal("CLOUDFLARE_BUILD_LIMIT_INVALID", { reason: "invalid-exhaustion-flag" });
+  }
+  if (refresh !== undefined && (typeof refresh !== "string" || !Number.isFinite(Date.parse(refresh)))) {
+    return refusal("CLOUDFLARE_BUILD_LIMIT_INVALID", { reason: "invalid-refresh-time" });
+  }
+  return Object.freeze({
+    type: "CloudflareWorkersBuildMinutesObservation",
+    version: 1,
+    accountId,
+    observedAt: new Date().toISOString(),
+    status: reached === true ? "exhausted" : reached === false ? "not-exhausted" : "unknown",
+    refreshAt: refresh ?? null,
+    claim: "Workers Builds allowance only; this response does not measure remaining minutes, billable cost, KV, R2, or Worker invocations",
+  });
+}
+
 if (import.meta.main) {
   const result = await runJavascriptNodeOperation({ name: "derive-cloudflare-account-inventory", description: "Derives one CloudflareAccountInventory record -- zones, their DNS records, Workers scripts, and Workers custom domains -- for one Cloudflare account, reading the API token from the named environment variable and refusing rather than throwing on an unset token or a non-success API body.", operation: deriveCloudflareAccountInventory }, { arguments: process.argv.slice(2), standardInput: process.stdin, standardOutput: process.stdout });
   process.exitCode = result.exitCode;
