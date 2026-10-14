@@ -20,6 +20,7 @@ const other = { id: "d".repeat(32), ref: "unrelated_security_rule", action: "set
 
 function fakeProvider({ current, mutate = true, wrongZone = false, missingPhase = false } = {}) {
   const calls = [], rules = [...(current ?? [])];
+  let phaseExists = !missingPhase;
   const respond = result => Response.json({success:true,errors:[],messages:[],result});
   const fetchImpl = async (url, init) => {
     calls.push({url,method:init.method??"GET",auth:init.headers.authorization,body:init.body});
@@ -27,8 +28,17 @@ function fakeProvider({ current, mutate = true, wrongZone = false, missingPhase 
     if (url.endsWith("/zones/" + zoneId))
       return respond({id:zoneId,name:wrongZone?"unrelated.example":zoneName});
     if (url.endsWith("/rulesets/phases/http_config_settings/entrypoint")) {
-      if (missingPhase) return Response.json({success:false,errors:[{code:10000,message:"missing"}]},{status:404});
+      if (!phaseExists) return Response.json({success:false,errors:[{code:10000,message:"missing"}]},{status:404});
       return respond({id:rulesetId,version:String(calls.length),phase:"http_config_settings",rules});
+    }
+    if (url.endsWith("/zones/" + zoneId + "/rulesets") && init.method === "POST") {
+      assert.equal(phaseExists,false,"only create a genuinely absent phase");
+      const requested=JSON.parse(init.body);
+      assert.equal(requested.kind,"zone");
+      assert.equal(requested.phase,"http_config_settings");
+      assert.equal(requested.rules.length,1);
+      if (mutate) { phaseExists=true; rules.push({...requested.rules[0],id:ruleId}); }
+      return respond({id:rulesetId,kind:"zone",phase:"http_config_settings",rules});
     }
     if (url.endsWith("/rulesets/" + rulesetId + "/rules") && init.method === "POST") {
       if (mutate) rules.push({ ...JSON.parse(init.body), id:ruleId });
@@ -83,8 +93,15 @@ test("provider claims without zone authority, existing phase, unique refs or ver
   await assert.rejects(receivePayPerCrawlExclusion({...options,apply:true,fetchImpl:p1.fetchImpl}),/zone identifier and zone name disagree/u);
   assert.equal(p1.calls.length,1);
   const p2=fakeProvider({missingPhase:true});
-  await assert.rejects(receivePayPerCrawlExclusion({...options,apply:true,fetchImpl:p2.fetchImpl}),/HTTP 404/u);
+  const plan=await receivePayPerCrawlExclusion({...options,fetchImpl:p2.fetchImpl});
+  assert.equal(plan.status,"phase-create-required");
+  assert.equal(plan.ruleId,null);
   assert.equal(p2.calls.every(x=>x.method==="GET"),true);
+  const installed=await receivePayPerCrawlExclusion({...options,apply:true,fetchImpl:p2.fetchImpl});
+  assert.equal(installed.status,"received");
+  assert.equal(installed.ruleId,ruleId);
+  assert.equal(p2.calls.filter(x=>x.method==="POST").length,1);
+  assert.equal(p2.calls.filter(x=>x.method==="PUT").length,0);
   const p3=fakeProvider({current:[{...expected,id:ruleId},{...expected,id:"e".repeat(32)}]});
   await assert.rejects(receivePayPerCrawlExclusion({...options,apply:true,fetchImpl:p3.fetchImpl}),/duplicate/u);
   assert.equal(p3.calls.every(x=>x.method==="GET"),true);
@@ -104,4 +121,24 @@ test("unqualified site/zone identity refuses before any token-bearing provider r
     await assert.rejects(receivePayPerCrawlExclusion({...options,...bad,fetchImpl:async()=>{calls++;throw Error("must not fetch");}}));
   }
   assert.equal(calls,0);
+});
+
+test("new phase creation never promotes a provider write without live phase readback", async () => {
+  const p=fakeProvider({missingPhase:true,mutate:false});
+  await assert.rejects(receivePayPerCrawlExclusion({...options,apply:true,fetchImpl:p.fetchImpl}),
+    /HTTP 404|readback/u);
+  assert.equal(p.calls.filter(x=>x.method==="POST").length,1);
+  assert.equal(p.calls.filter(x=>x.method==="PUT").length,0);
+});
+
+test("nonexistent phase is the only allowed absence: malformed zone/API errors are not new phases", async () => {
+  const calls=[];
+  const fake=async (url,init)=>{
+    calls.push({url,method:init.method??"GET"});
+    if(url.endsWith("/zones/"+zoneId))
+      return Response.json({success:true,errors:[],result:{id:zoneId,name:zoneName}});
+    return Response.json({success:false,errors:[{code:1234}]},{status:403});
+  };
+  await assert.rejects(receivePayPerCrawlExclusion({...options,apply:true,fetchImpl:fake}),/HTTP 403/u);
+  assert.equal(calls.filter(x=>x.method!=="GET").length,0);
 });
