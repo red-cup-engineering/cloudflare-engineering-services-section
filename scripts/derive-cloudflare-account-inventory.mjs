@@ -99,7 +99,7 @@ function mapCustomDomain(domain) {
  * @returns {Promise<object>} A CloudflareAccountInventory record on success, or a CloudflareAccountInventoryRefusal datum carrying code `TOKEN_ENVIRONMENT_VARIABLE_UNSET` or `CLOUDFLARE_API_REFUSED`.
  * @throws {TypeError} When `request` is not a JSON object, `request.accountId` is not 32 hexadecimal characters, or `request.tokenEnvironmentVariable` is not a non-empty string.
  */
-export async function deriveCloudflareAccountInventory(request) {
+export async function deriveCloudflareAccountInventory(request, { environment = process.env } = {}) {
   requireObject(request, "request");
   const accountId = requireNonEmptyString(request.accountId, "request.accountId");
   if (!ACCOUNT_ID_PATTERN.test(accountId)) {
@@ -108,7 +108,7 @@ export async function deriveCloudflareAccountInventory(request) {
   const tokenEnvironmentVariable = requireNonEmptyString(request.tokenEnvironmentVariable, "request.tokenEnvironmentVariable");
   const fetchImpl = request.fetch ?? fetch;
 
-  const token = process.env[tokenEnvironmentVariable];
+  const token = environment[tokenEnvironmentVariable];
   if (typeof token !== "string" || token.length === 0) {
     return refusal("TOKEN_ENVIRONMENT_VARIABLE_UNSET", { tokenEnvironmentVariable });
   }
@@ -164,14 +164,14 @@ export async function deriveCloudflareAccountInventory(request) {
  * KV or R2 allowance, not an estimated number of unused build minutes, and
  * not a billing receipt. Incomplete or denied scope remains UNKNOWN.
  */
-export async function observeCloudflareBuildMinutes(request) {
+export async function observeCloudflareBuildMinutes(request, { environment = process.env } = {}) {
   requireObject(request, "request");
   const accountId = requireNonEmptyString(request.accountId, "request.accountId");
   if (!ACCOUNT_ID_PATTERN.test(accountId)) {
     throw new TypeError("Cloudflare build observation needs an exact account id");
   }
   const tokenEnvironmentVariable = requireNonEmptyString(request.tokenEnvironmentVariable, "request.tokenEnvironmentVariable");
-  const token = process.env[tokenEnvironmentVariable];
+  const token = environment[tokenEnvironmentVariable];
   if (typeof token !== "string" || !token.length) {
     return refusal("TOKEN_ENVIRONMENT_VARIABLE_UNSET", { tokenEnvironmentVariable });
   }
@@ -321,13 +321,13 @@ export async function deriveCloudflareWorkerStorageBindings(request) {
  * R2 uses cursor pagination, unlike Zones' page-number pagination. No output
  * on partial coverage is permitted to masquerade as an empty bucket account.
  */
-export async function observeCloudflareR2Buckets(request) {
+export async function observeCloudflareR2Buckets(request, { environment = process.env } = {}) {
   requireObject(request,"request");
   const accountId=requireNonEmptyString(request.accountId,"request.accountId");
   if(!ACCOUNT_ID_PATTERN.test(accountId))throw new TypeError("R2 account id must be exact");
   const tokenEnvironmentVariable=requireNonEmptyString(
     request.tokenEnvironmentVariable,"request.tokenEnvironmentVariable");
-  const token=process.env[tokenEnvironmentVariable];
+  const token=environment[tokenEnvironmentVariable];
   if(typeof token!=="string"||!token.length)
     return refusal("TOKEN_ENVIRONMENT_VARIABLE_UNSET",{tokenEnvironmentVariable});
   const sourceFetch=request.fetch??fetch;

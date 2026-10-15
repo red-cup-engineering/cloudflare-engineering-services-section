@@ -20,5 +20,8 @@
   "dependencies": {
     "@red-cup-engineering/computer-file-engineering-services-section": "workspace:*",
     "@red-cup-engineering/javascript-node-services-section": "workspace:*"
-  }
+  },
+  "receivingTests": [
+    "test/observation-environment.test.mjs"
+  ]
 }
