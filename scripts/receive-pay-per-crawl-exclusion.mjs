@@ -1,18 +1,19 @@
 import { derivePayPerCrawlExclusion } from "./derive-pay-per-crawl-exclusion.mjs";
+import { fetchWithoutRedirects } from "@red-cup-engineering/http-services-section/fetch-without-redirects";
 
 const API = "https://api.cloudflare.com/client/v4";
 const ZONE = /^[a-fA-F0-9]{32}$/u;
 const RULE = /^[a-fA-F0-9]{32}$/u;
 
 async function readJson(fetchImpl, url, token, options = {}, { allowMissingPhase = false } = {}) {
-  const response = await fetchImpl(url, {
-    ...options, redirect: "error",
+  const response = await fetchWithoutRedirects(url, {
+    ...options,
     headers: {
       authorization: `Bearer ${token}`,
       accept: "application/json",
       ...(options.body === undefined ? {} : { "content-type": "application/json" }),
     },
-  });
+  }, fetchImpl);
   // Only an explicit 404 from the caller's exact phase entrypoint can mean
   // no zone-level configuration ruleset exists. No other resource permits this
   // interpretation; access-denied, network and malformed responses still fail.

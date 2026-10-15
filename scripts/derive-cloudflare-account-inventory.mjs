@@ -90,6 +90,49 @@ function mapCustomDomain(domain) {
   return { hostname: domain.hostname, service: domain.service, zoneName: domain.zone_name ?? domain.zoneName ?? null };
 }
 
+/** Observe one zone's actual Worker ownership with an existing bearer login.
+ * Zone/account reads establish scope; this does not require an unrelated
+ * token-management or DNS permission, and also accepts native Wrangler OAuth.
+ */
+export async function observeCloudflareZoneRouting(request, { environment = process.env } = {}) {
+  requireObject(request, "request");
+  const accountId = requireNonEmptyString(request.accountId, "request.accountId");
+  const zoneName = requireNonEmptyString(request.zoneName, "request.zoneName");
+  const variable = requireNonEmptyString(request.tokenEnvironmentVariable, "request.tokenEnvironmentVariable");
+  if (!ACCOUNT_ID_PATTERN.test(accountId)) throw new TypeError("Cloudflare account ID must be 32 hexadecimal characters");
+  const token = environment[variable];
+  if (!token) return refusal("TOKEN_ENVIRONMENT_VARIABLE_UNSET", { tokenEnvironmentVariable: variable });
+  const read = (url, options) => (request.fetch ?? fetch)(url, {
+    ...options, signal: AbortSignal.timeout(15000),
+  });
+  const selected = await cloudflareList(read, token,
+    `/zones?account.id=${accountId}&name=${encodeURIComponent(zoneName)}`, 50, zone => zone?.id);
+  if (selected.type) return selected;
+  if (selected.values.length !== 1 || selected.values[0].name !== zoneName ||
+      selected.values[0].account?.id !== accountId) {
+    return refusal("CLOUDFLARE_ZONE_SCOPE_MISMATCH", { accountId, zoneName });
+  }
+  const zone = selected.values[0];
+  const [routes, domains] = await Promise.all([
+    cloudflareGet(read, token, `/zones/${zone.id}/workers/routes`),
+    cloudflareGet(read, token, `/accounts/${accountId}/workers/domains`),
+  ]);
+  for (const observation of [routes, domains]) {
+    if (!observation.ok) return refusal("CLOUDFLARE_API_REFUSED", {
+      path: observation.path, errors: observation.body?.errors ?? [],
+    });
+    if (!Array.isArray(observation.body.result)) return refusal("CLOUDFLARE_LIST_INVALID", { path: observation.path });
+  }
+  return Object.freeze({
+    type: "CloudflareZoneRouting", version: 1,
+    observedAt: new Date().toISOString(), accountId, zoneId: zone.id, zoneName,
+    routes: routes.body.result.map(route => ({ id: route.id, pattern: route.pattern, script: route.script })),
+    customDomains: domains.body.result
+      .filter(domain => domain.zone_id === zone.id || domain.zone_name === zoneName)
+      .map(domain => ({ id: domain.id, hostname: domain.hostname, service: domain.service, environment: domain.environment })),
+  });
+}
+
 /**
  * Derives one CloudflareAccountInventory record -- zones, their DNS records, Workers scripts, and Workers custom domains -- for one Cloudflare account, reading the API token from the named environment variable and refusing rather than throwing on an unset token or a non-success API body.
  * @param {object} request A DeriveCloudflareAccountInventoryRequest.
