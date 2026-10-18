@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "description": "Verify that a named tunnel's route binding and systemd unit conform to the fixed laptop-owned token-file ingress shape.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/computer-web-engineering-services-section.git",
+    "directory": "services/web-platform-services-section/services/cloud-services-section/services/cloudflare-services-section/services/cloudflare-tunnel-config-checker-service"
+  },
   "exports": {
     "./verify-ingress": "./src/verify-cloudflare-ingress.mjs"
   },
