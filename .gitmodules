@@ -1,0 +1,28 @@
+[submodule "linux-cloudflare-authentication-service"]
+	path = services/linux-cloudflare-authentication-service
+	url = https://github.com/red-cup-engineering/linux-cloudflare-authentication-service.git
+	branch = main
+[submodule "cloudflare-tunnel-config-checker-service"]
+	path = services/cloudflare-tunnel-config-checker-service
+	url = https://github.com/red-cup-engineering/cloudflare-tunnel-config-checker-service.git
+	branch = main
+[submodule "cloudflare-tunnel-auth-service"]
+	path = services/cloudflare-tunnel-auth-service
+	url = https://github.com/red-cup-engineering/cloudflare-tunnel-auth-service.git
+	branch = main
+[submodule "cloudflare-r2-services-section"]
+	path = services/cloudflare-r2-services-section
+	url = https://github.com/red-cup-engineering/cloudflare-r2-services-section.git
+	branch = main
+[submodule "cloudflare-dns-record-reconciliation-service"]
+	path = services/cloudflare-dns-record-reconciliation-service
+	url = https://github.com/red-cup-engineering/cloudflare-dns-record-reconciliation-service.git
+	branch = main
+[submodule "cloudflare-d1-service"]
+	path = services/cloudflare-d1-service
+	url = https://github.com/red-cup-engineering/cloudflare-d1-service.git
+	branch = main
+[submodule "cloudflare-activitystreams-operation-services-section"]
+	path = services/cloudflare-activitystreams-operation-services-section
+	url = https://github.com/red-cup-engineering/cloudflare-activitystreams-operation-services-section.git
+	branch = main
