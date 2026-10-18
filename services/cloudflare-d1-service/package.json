@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "type": "module",
   "description": "The Cloudflare D1 database handle contract -- prepare/bind/first/all/run/batch/exec -- with a local node:sqlite double and a migration applier, so Assist and every other Workers application store composes one D1 shape on the platform and in tests.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/computer-web-engineering-services-section.git",
+    "directory": "services/web-platform-services-section/services/cloud-services-section/services/cloudflare-services-section/services/cloudflare-d1-service"
+  },
   "exports": {
     "./sqlite": "./src/sqlite-d1.mjs",
     "./migrations": "./src/apply-migrations.mjs",

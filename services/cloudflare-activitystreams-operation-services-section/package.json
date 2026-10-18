@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Cloudflare R2 and Worker operations with ActivityStreams adapters.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/computer-web-engineering-services-section.git",
+    "directory": "services/web-platform-services-section/services/cloud-services-section/services/cloudflare-services-section/services/cloudflare-activitystreams-operation-services-section"
+  },
   "scripts": {
     "check": "node --check src/contract-cloudflare-r2-object-custody.js && node --check src/contract-cloudflare-static-delivery.js && node --check src/contract-cloudflare-primary-static-release.js && node --check src/contract-cloudflare-koios-attention.js",
     "test": "node --test test/*.test.js"
