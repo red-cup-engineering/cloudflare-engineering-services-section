@@ -1,0 +1,16 @@
+{
+  "source": "https://raw.githubusercontent.com/cloudflare/api-schemas/843eae2fbf4fe774ef9c91021dd34017ac9c970a/openapi.json",
+  "sourceCommit": "843eae2fbf4fe774ef9c91021dd34017ac9c970a",
+  "info": { "title": "Cloudflare API", "version": "4.0.0" },
+  "observedOn": "2026-10-19",
+  "paths": {
+    "GET /zones": {
+      "operationId": "zones-get",
+      "per_page": { "description": "Number of zones per page.", "type": "number", "default": 20, "minimum": 5, "maximum": 50 }
+    },
+    "GET /zones/{zone_id}/dns_records": {
+      "operationId": "dns-records-for-a-zone-list-dns-records",
+      "per_page": { "description": "Number of DNS records per page.", "type": "number", "default": 100, "minimum": 1, "maximum": 5000000 }
+    }
+  }
+}
