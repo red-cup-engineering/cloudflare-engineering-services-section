@@ -193,7 +193,11 @@ The `canonical-host-deploy` workflow tests it on change and redeploys it daily. 
 
 ```sh
 node scripts/with-cloudflare-token.mjs --env-file /home/emsenn/info/.env \
-  --account-permission 'Workers Editor' -- node scripts/deploy-canonical-host-redirect.mjs
+  --account-permission 'Workers Editor' \
+  --zone-id 8e323e4e37ce16cc4fb4c51aa5d28b23 --zone-permission 'Workers Routes Write' \
+  -- node scripts/deploy-canonical-host-redirect.mjs
 ```
+
+Setting routes needs `Workers Routes Write` on each routed zone. `8e323e4e37ce16cc4fb4c51aa5d28b23` is `koios.news`, currently the only routed zone. A new apex in the estate needs its own zone ID added. Without that permission the Worker uploads, but the routes call is refused and existing routes stay as they are.
 
 The capability was received from Coesite Operations (`services/canonical-host-services-section`, commit `4f5ec872`), where it was misplaced. The estate is its only input.
