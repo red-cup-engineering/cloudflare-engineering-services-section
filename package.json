@@ -16,7 +16,8 @@
     "./verify-cloudflare-ingress": "./scripts/verify-cloudflare-ingress.mjs",
     "./derive-cloudflare-account-inventory": "./scripts/derive-cloudflare-account-inventory.mjs",
     "./pay-per-crawl-exclusion": "./scripts/derive-pay-per-crawl-exclusion.mjs",
-    "./receive-pay-per-crawl-exclusion": "./scripts/receive-pay-per-crawl-exclusion.mjs"
+    "./receive-pay-per-crawl-exclusion": "./scripts/receive-pay-per-crawl-exclusion.mjs",
+    "./canonical-host": "./scripts/canonical-host.mjs"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs"
