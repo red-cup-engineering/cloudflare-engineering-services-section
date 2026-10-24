@@ -24,7 +24,7 @@ const observe=(response,fetchOverride)=>{
   return {
     calls,
     run:(options={})=>observeCloudflareKvOperations({
-      accountId,day:options.day??day,tokenEnvironmentVariable:variable,fetch:sourceFetch,
+      accountId,day:Object.hasOwn(options,"day")?options.day:day,tokenEnvironmentVariable:variable,fetch:sourceFetch,
     },{environment:options.environment??{[variable]:"private-fixture-token"},now:options.now??clock}),
   };
 };
