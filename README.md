@@ -184,3 +184,20 @@ Official operating references:
 - https://developers.cloudflare.com/ai-crawl-control/features/pay-per-crawl/use-pay-per-crawl-as-site-owner/set-a-pay-per-crawl-price/
 - https://developers.cloudflare.com/ai-crawl-control/features/pay-per-crawl/use-pay-per-crawl-as-site-owner/advanced-configuration/
 - https://developers.cloudflare.com/ai-crawl-control/features/pay-per-crawl/use-pay-per-crawl-as-site-owner/manage-payouts/
+
+## www → apex redirect
+
+`scripts/canonical-host-worker.mjs` is the `canonical-host-redirect` Worker. It answers every `www.` alias of an estate apex with a permanent 308 redirect to the apex, keeping the path and query. It answers 421 for any other host. `scripts/canonical-host.mjs` holds the rule: a host with exactly two labels in the published estate (`https://561.group/estate-records.json`) is an apex, and its `www.` alias is one of the Worker's routes. `scripts/deploy-canonical-host-redirect.mjs` derives the routes and deploys the Worker with exactly those routes (`--dry-run` prints them without deploying).
+
+The `canonical-host-deploy` workflow tests it on change and redeploys it daily. It needs the `CLOUDFLARE_API_TOKEN` repository secret. To deploy by hand:
+
+```sh
+node scripts/with-cloudflare-token.mjs --env-file /home/emsenn/info/.env \
+  --account-permission 'Workers Editor' \
+  --zone-id 8e323e4e37ce16cc4fb4c51aa5d28b23 --zone-permission 'Workers Routes Write' \
+  -- node scripts/deploy-canonical-host-redirect.mjs
+```
+
+Setting routes needs `Workers Routes Write` on each routed zone. `8e323e4e37ce16cc4fb4c51aa5d28b23` is `koios.news`, currently the only routed zone. A new apex in the estate needs its own zone ID added. Without that permission the Worker uploads, but the routes call is refused and existing routes stay as they are.
+
+The capability was received from Coesite Operations (`services/canonical-host-services-section`, commit `4f5ec872`), where it was misplaced. The estate is its only input.
