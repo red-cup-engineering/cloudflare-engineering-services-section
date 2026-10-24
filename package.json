@@ -28,7 +28,8 @@
     "@red-cup-engineering/javascript-node-operation-engineering-services-section": "0.2.0"
   },
   "receivingTests": [
-    "test/observation-environment.test.mjs"
+    "test/observation-environment.test.mjs",
+    "test/observe-kv-operations.test.mjs"
   ],
   "private": false,
   "files": [
