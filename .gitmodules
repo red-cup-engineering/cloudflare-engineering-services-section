@@ -12,7 +12,7 @@
 	branch = main
 [submodule "cloudflare-r2-services-section"]
 	path = services/cloudflare-r2-services-section
-	url = https://github.com/red-cup-engineering/cloudflare-r2-services-section.git
+	url = https://github.com/red-cup-engineering/cloudflare-r2-engineering-services-section.git
 	branch = main
 [submodule "cloudflare-dns-record-reconciliation-service"]
 	path = services/cloudflare-dns-record-reconciliation-service
@@ -24,5 +24,5 @@
 	branch = main
 [submodule "cloudflare-activitystreams-operation-services-section"]
 	path = services/cloudflare-activitystreams-operation-services-section
-	url = https://github.com/red-cup-engineering/cloudflare-activitystreams-operation-services-section.git
+	url = https://github.com/red-cup-engineering/cloudflare-activitystreams-engineering-services-section.git
 	branch = main
