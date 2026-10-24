@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@red-cup-engineering/computer-file-engineering-services-section": "0.4.0",
-    "@red-cup-engineering/http-services-section": "0.6.2",
+    "@red-cup-engineering/http-engineering-services-section": "0.6.2",
     "@red-cup-engineering/javascript-node-operation-engineering-services-section": "0.2.0"
   },
   "receivingTests": [
