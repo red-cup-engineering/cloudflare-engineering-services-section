@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createWorkerVersionClient, workerContentModules } from '../scripts/worker-versions.mjs';
+import { createWorkerVersionClient, workerContentModules, workerVersionPreviewOrigin } from '../scripts/worker-versions.mjs';
 
 const id = '11111111-1111-4111-8111-111111111111';
 const accountId = '337e54ee6dc7d488933f473204a6d89e';
@@ -69,5 +69,99 @@ test('a forged oversized Content-Length is refused and its stream is cancelled',
   let cancelled = false;
   const response = new Response(new ReadableStream({ cancel() { cancelled = true; } }), { headers: { 'content-length': String(64 * 1024 * 1024) } });
   await assert.rejects(client(async () => response).content(), /PROVIDER_BODY_LIMIT/u);
+  assert.equal(cancelled, true);
+});
+
+test('script availability and existing account hostname use their separate documented GET routes', async () => {
+  const calls = [], availability = { enabled: false, previews_enabled: true };
+  const provider = client(async (url, init) => {
+    calls.push(url);
+    assert.equal(init.method, 'GET'); assert.equal(init.body, undefined);
+    if (url === `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/market-561-group/subdomain`) return json(availability);
+    if (url === `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/subdomain`) return json({ subdomain: 'original-account' });
+    assert.fail('Unselected provider route');
+  });
+  assert.deepEqual(await provider.subdomain(), availability);
+  const account = await provider.accountSubdomain();
+  assert.deepEqual(account, { subdomain: 'original-account' });
+  assert.equal(workerVersionPreviewOrigin({ versionId: id, scriptName: 'market-561-group', accountSubdomain: account.subdomain }),
+    'https://11111111-market-561-group.original-account.workers.dev');
+  assert.equal(calls.length, 2);
+});
+
+test('a fabricated preview suffix never replaces the original account hostname resource', async () => {
+  let calls = 0;
+  const provider = client(async () => { calls++; return json({ previews_enabled: true, preview_url_suffix: '-market-561-group.fabricated.workers.dev' }); });
+  await assert.rejects(provider.accountSubdomain(), { code: 'WORKER_ACCOUNT_SUBDOMAIN_UNRECEIVED' });
+  assert.equal(calls, 1);
+});
+
+test('version origin derivation refuses missing, ambiguous or escaping hostname resources', () => {
+  for (const accountSubdomain of [undefined, 123, {}, [], '', 'not.a.label', 'account/other', 'account@host', '-account', 'account-', 'a'.repeat(64)]) {
+    assert.throws(() => workerVersionPreviewOrigin({ versionId: id, scriptName: 'market-561-group', accountSubdomain }),
+      { code: 'WORKER_ACCOUNT_SUBDOMAIN_UNRECEIVED' });
+  }
+  for (const scriptName of ['market/other', 'market.other', 'market@host', 'a'.repeat(55)]) {
+    assert.throws(() => workerVersionPreviewOrigin({ versionId: id, scriptName, accountSubdomain: 'original-account' }),
+      { code: 'WORKER_VERSION_PREVIEW_ADDRESS_UNRECEIVED' });
+  }
+  assert.throws(() => workerVersionPreviewOrigin({ versionId: '../other', scriptName: 'market', accountSubdomain: 'original-account' }),
+    { code: 'INVALID_WORKER_VERSION' });
+});
+
+test('the documented deployment, version-list, immutable-version and script-settings envelopes are consumed at their original routes', async () => {
+  const later = '22222222-2222-4222-8222-222222222222';
+  const deployment = { id, source: 'api', strategy: 'percentage', versions: [{ version_id: later, percentage: 100 }] };
+  const resources = { bindings: [{ name: 'SOURCE', type: 'plain_text', text: 'fixture' }],
+    script: { etag: 'fixture-content-etag', handlers: ['fetch'] },
+    script_runtime: { compatibility_date: '2026-08-31', compatibility_flags: ['nodejs_compat'], exports: { default: { type: 'worker', state: 'created' } } } };
+  const settings = { logpush: false, observability: { enabled: true } }, calls = [];
+  const provider = client(async (url, init) => {
+    assert.equal(init.method, 'GET'); calls.push(url);
+    if (url.endsWith('/deployments')) return json({ deployments: [deployment] });
+    if (url.endsWith('/versions')) return json({ items: [{ id, number: 10 }, { id: later, number: 11 }] });
+    if (url.endsWith(`/versions/${later}`)) return json({ id: later, number: 11, resources });
+    if (url.endsWith('/script-settings')) return json(settings);
+    assert.fail('Unselected provider route');
+  });
+  assert.deepEqual(await provider.activeDeployment(), deployment);
+  assert.equal((await provider.latestVersion()).id, later);
+  assert.deepEqual((await provider.version(later)).resources, resources);
+  assert.deepEqual(await provider.scriptSettings(), settings);
+  assert.equal(calls.length, 4);
+});
+
+test('exact-version module receiving selects the existing Worker name and UUID without a latest-content guess', async () => {
+  const bytes = Buffer.from('export default {fetch(){return new Response("received")}}'), calls = [];
+  const provider = client(async (url, init) => {
+    calls.push(url); assert.equal(init.method, 'GET');
+    assert.equal(url, `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/workers/market-561-group/versions/${id}?include=modules`);
+    return json({ id, number: 42, main_module: 'worker.mjs', modules: [
+      { name: 'worker.mjs', content_type: 'application/javascript+module', content_base64: bytes.toString('base64') },
+    ] });
+  });
+  const modules = await provider.versionModules(id);
+  assert.equal(modules.length, 1); assert.deepEqual(Buffer.from(modules[0]), bytes); assert.equal(calls.length, 1);
+});
+
+test('exact-version module receiving refuses another UUID, omitted modules and ambiguous module identities', async () => {
+  const module = { name: 'worker.mjs', content_type: 'application/javascript+module', content_base64: 'YQ==' };
+  for (const [result, code] of [
+    [{ id: '22222222-2222-4222-8222-222222222222', modules: [module] }, 'PROVIDER_VERSION_IDENTITY_CHANGED'],
+    [{ id }, 'VERSION_MODULES_UNRECEIVED'], [{ id, modules: [] }, 'VERSION_MODULES_UNRECEIVED'],
+    [{ id, modules: [module, module] }, 'VERSION_MODULES_UNRECEIVED'],
+    [{ id, modules: [{ ...module, content_type: undefined }] }, 'VERSION_MODULES_UNRECEIVED'],
+  ]) await assert.rejects(client(async () => json(result)).versionModules(id), { code });
+});
+
+test('module base64 must decode canonically and stays within the aggregate original byte bound', async () => {
+  for (const content_base64 of ['YQ', 'YQ===', 'Y Q==', 'Y!==', 'YQ==\n', 'YR==']) {
+    const provider = client(async () => json({ id, modules: [{ name: 'worker.mjs', content_type: 'application/javascript+module', content_base64 }] }));
+    await assert.rejects(provider.versionModules(id), { code: 'VERSION_MODULE_BASE64_UNRECEIVED' });
+  }
+  let cancelled = false;
+  const response = new Response(new ReadableStream({ cancel() { cancelled = true; } }),
+    { headers: { 'content-length': String(Math.ceil(32 * 1024 * 1024 / 3) * 4 + 4 * 1024 * 1024 + 1) } });
+  await assert.rejects(client(async () => response).versionModules(id), { code: 'PROVIDER_BODY_LIMIT' });
   assert.equal(cancelled, true);
 });

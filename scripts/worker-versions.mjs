@@ -5,14 +5,20 @@
  * https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/versions/methods/create/
  * https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/versions/methods/get/
  * https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/content/methods/get/
+ * https://developers.cloudflare.com/api/resources/workers/subresources/subdomains/
+ * https://developers.cloudflare.com/api/resources/workers/subresources/beta/subresources/workers/subresources/versions/methods/get/
  * https://developers.cloudflare.com/workers/versions-and-deployments/version-urls/
  * Script-version inherit resolves LATEST UPLOADED, not necessarily deployed.
  * Strict inherit is mandatory here. The application must check its lease.
  */
+import { Buffer } from 'node:buffer';
+
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/iu;
 const API = 'https://api.cloudflare.com/client/v4';
 const MAX_JSON = 4 * 1024 * 1024;
 const MAX_CONTENT = 32 * 1024 * 1024;
+const MAX_MODULE_JSON = Math.ceil(MAX_CONTENT / 3) * 4 + MAX_JSON;
+const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
 
 export class WorkerVersionEffectError extends Error {
   constructor(code, { status = null, providerCodes = [] } = {}) {
@@ -28,6 +34,19 @@ export class WorkerVersionEffectError extends Error {
 function requireVersion(id) {
   if (!UUID.test(id ?? '')) throw new WorkerVersionEffectError('INVALID_WORKER_VERSION');
   return id.toLowerCase();
+}
+
+/** The script-subdomain response supplies availability flags, not a hostname.
+ * Derive the documented version origin from the separately received existing
+ * account subdomain and selected script/version. This performs no API call. */
+export function workerVersionPreviewOrigin({ versionId, scriptName, accountSubdomain } = {}) {
+  const version = requireVersion(versionId);
+  if (typeof accountSubdomain !== 'string' || !DNS_LABEL.test(accountSubdomain)) throw new WorkerVersionEffectError('WORKER_ACCOUNT_SUBDOMAIN_UNRECEIVED');
+  const workerLabel = `${version.slice(0, 8)}-${scriptName}`;
+  if (typeof scriptName !== 'string' || !DNS_LABEL.test(scriptName) || !DNS_LABEL.test(workerLabel)) {
+    throw new WorkerVersionEffectError('WORKER_VERSION_PREVIEW_ADDRESS_UNRECEIVED');
+  }
+  return `https://${workerLabel}.${accountSubdomain}.workers.dev`;
 }
 
 async function boundedBytes(response, limit) {
@@ -65,11 +84,12 @@ export function createWorkerVersionClient({ accountId, scriptName, token, fetch:
       typeof token !== 'string' || !token || /[\r\n]/u.test(token) || typeof send !== 'function') {
     throw new WorkerVersionEffectError('INVALID_WORKER_PROVIDER_SELECTION');
   }
-  const script = `${API}/accounts/${accountId}/workers/scripts/${scriptName}`;
-  async function request(suffix, { method = 'GET', body, limit = MAX_JSON, raw = false } = {}) {
+  const accountRoot = `${API}/accounts/${accountId}`;
+  const script = `${accountRoot}/workers/scripts/${scriptName}`;
+  async function request(suffix, { method = 'GET', body, limit = MAX_JSON, raw = false, accountScope = false } = {}) {
     let response, bytes;
     try {
-      response = await send(`${script}${suffix}`, {
+      response = await send(`${accountScope ? accountRoot : script}${suffix}`, {
         method, redirect: 'error', signal: AbortSignal.timeout(60_000),
         headers: { authorization: `Bearer ${token}`, 'cache-control': 'no-cache',
           ...((body !== undefined && !(body instanceof FormData)) ? { 'content-type': 'application/json' } : {}) },
@@ -114,8 +134,43 @@ export function createWorkerVersionClient({ accountId, scriptName, token, fetch:
     },
     scriptSettings() { return request('/script-settings'); },
     subdomain() { return request('/subdomain'); },
-    // This API has no documented version selector. The caller must bracket it
-    // with latestVersion readbacks that both equal the selected staged UUID.
+    async accountSubdomain() {
+      const result = await request('/workers/subdomain', { accountScope: true });
+      if (typeof result?.subdomain !== 'string' || !DNS_LABEL.test(result.subdomain)) throw new WorkerVersionEffectError('WORKER_ACCOUNT_SUBDOMAIN_UNRECEIVED');
+      return result;
+    },
+    async versionModules(id) {
+      const selected = requireVersion(id);
+      // The documented Worker identifier accepts its existing name. Request
+      // this immutable version's modules explicitly; the legacy content read
+      // below has no documented version selector or latest/active contract.
+      const result = await request(`/workers/workers/${scriptName}/versions/${selected}?include=modules`,
+        { accountScope: true, limit: MAX_MODULE_JSON });
+      if (result?.id?.toLowerCase() !== selected) throw new WorkerVersionEffectError('PROVIDER_VERSION_IDENTITY_CHANGED');
+      if (!Array.isArray(result.modules) || result.modules.length < 1 || result.modules.length > 128) {
+        throw new WorkerVersionEffectError('VERSION_MODULES_UNRECEIVED');
+      }
+      let total = 0;
+      const names = new Set(), modules = [];
+      for (const item of result.modules) {
+        if (typeof item?.name !== 'string' || !item.name || names.has(item.name) ||
+            typeof item.content_type !== 'string' || !item.content_type ||
+            typeof item.content_base64 !== 'string' || item.content_base64.length > Math.ceil((MAX_CONTENT - total) / 3) * 4) {
+          throw new WorkerVersionEffectError('VERSION_MODULES_UNRECEIVED');
+        }
+        names.add(item.name);
+        const bytes = Buffer.from(item.content_base64, 'base64');
+        total += bytes.length;
+        if (total > MAX_CONTENT) throw new WorkerVersionEffectError('PROVIDER_BODY_LIMIT');
+        // Buffer's decoder is intentionally permissive. A canonical round trip
+        // refuses skipped characters, whitespace, wrong padding and URL base64.
+        if (bytes.toString('base64') !== item.content_base64) throw new WorkerVersionEffectError('VERSION_MODULE_BASE64_UNRECEIVED');
+        modules.push(new Uint8Array(bytes));
+      }
+      return modules;
+    },
+    // Retained legacy read: this API documents neither a version selector nor
+    // latest-versus-active ownership. Use versionModules for version custody.
     content() { return request('/content/v2', { limit: MAX_CONTENT, raw: true }); },
     async uploadVersion({ metadata, moduleBytes }) {
       if (!metadata || metadata.main_module !== 'worker.mjs' || !Array.isArray(metadata.bindings) ||
