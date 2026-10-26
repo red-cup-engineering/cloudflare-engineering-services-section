@@ -18,7 +18,8 @@
     "./pay-per-crawl-exclusion": "./scripts/derive-pay-per-crawl-exclusion.mjs",
     "./receive-pay-per-crawl-exclusion": "./scripts/receive-pay-per-crawl-exclusion.mjs",
     "./canonical-host": "./scripts/canonical-host.mjs",
-    "./static-application-release": "./scripts/deploy-static-application.mjs"
+    "./static-application-release": "./scripts/deploy-static-application.mjs",
+    "./worker-versions": "./scripts/worker-versions.mjs"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs"
@@ -36,7 +37,8 @@
   },
   "receivingTests": [
     "test/observation-environment.test.mjs",
-    "test/static-application-release.test.mjs"
+    "test/static-application-release.test.mjs",
+    "test/worker-versions.test.mjs"
   ],
   "private": false,
   "files": [
@@ -45,7 +47,8 @@
     "LICENSE*",
     "scripts",
     "test/observation-environment.test.mjs",
-    "test/static-application-release.test.mjs"
+    "test/static-application-release.test.mjs",
+    "test/worker-versions.test.mjs"
   ],
   "license": "MIT",
   "funding": {
