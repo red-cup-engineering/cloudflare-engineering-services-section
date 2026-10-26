@@ -165,3 +165,126 @@ test('module base64 must decode canonically and stays within the aggregate origi
   await assert.rejects(client(async () => response).versionModules(id), { code: 'PROVIDER_BODY_LIMIT' });
   assert.equal(cancelled, true);
 });
+
+test('explicit inheritance uses the existing Worker beta operation with zero deployment and exact JSON module bytes', async () => {
+  const source = 'abcdefab-cdef-4abc-8def-abcdefabcdef';
+  const bytes = new Uint8Array([99, 0, 195, 169, 255, 88]).subarray(1, 5);
+  const metadata = { main_module: 'worker.mjs', compatibility_date: '2026-08-31', compatibility_flags: ['nodejs_compat'],
+    usage_model: 'standard', exports: { default: { type: 'worker', state: 'created' } },
+    annotations: { 'workers/message': 'received artifact and exact source', 'workers/tag': 'fixture', 'workers/triggered_by': 'api' },
+    bindings: [{ name: 'SECRET', type: 'inherit' }, { name: 'RENAMED', type: 'inherit', old_name: 'ORIGINAL', version_id: source.toUpperCase() },
+      { name: 'MARKET_BUILD_SHA', type: 'plain_text', text: 'fixture-source' }] };
+  const original = structuredClone(metadata), calls = [];
+  const result = { id, number: 8, created_on: '2026-10-26T00:00:00Z', urls: [] };
+  const provider = client(async (url, init) => {
+    calls.push(url);
+    assert.equal(url, `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/workers/market-561-group/versions?deploy=false`);
+    assert.equal(init.method, 'POST'); assert.equal(init.redirect, 'error');
+    assert.equal(init.headers['content-type'], 'application/json');
+    assert.equal(typeof init.body, 'string');
+    const body = JSON.parse(init.body);
+    assert.deepEqual(body, { ...original, bindings: [
+      { name: 'SECRET', type: 'inherit', version_id: source },
+      { name: 'RENAMED', type: 'inherit', old_name: 'ORIGINAL', version_id: source },
+      original.bindings[2],
+    ], modules: [{ name: 'worker.mjs', content_type: 'application/javascript+module', content_base64: Buffer.from(bytes).toString('base64') }] });
+    assert.deepEqual(new Uint8Array(Buffer.from(body.modules[0].content_base64, 'base64')), bytes);
+    return json(result);
+  });
+  const received = await provider.uploadVersionFrom({ metadata, moduleBytes: bytes, inheritVersionId: source.toUpperCase() });
+  assert.deepEqual(received, result); assert.equal(Object.hasOwn(received, 'resources'), false);
+  assert.deepEqual(metadata, original); assert.equal(calls.length, 1);
+});
+
+test('explicit inheritance refuses absent or ambiguous version selections before any provider call', async () => {
+  let calls = 0;
+  const provider = client(async () => { calls++; return json({ id }); });
+  const metadata = { main_module: 'worker.mjs', bindings: [{ name: 'SECRET', type: 'inherit' }] };
+  for (const inheritVersionId of [undefined, null, '', 'latest', '../another-worker', {}, [], 1]) {
+    await assert.rejects(provider.uploadVersionFrom({ metadata, moduleBytes: new Uint8Array([1]), inheritVersionId }), { code: 'INVALID_WORKER_VERSION' });
+  }
+  for (const bindings of [
+    [{ name: 'SECRET', type: 'inherit', version_id: '22222222-2222-4222-8222-222222222222' }],
+    [{ name: 'SECRET', type: 'inherit', version_id: 'latest' }],
+    [{ name: 'SECRET', type: 'inherit', version_id: null }],
+    [{ name: 'VALUE', type: 'plain_text', text: 'fixture', version_id: id }],
+    [{ name: 'SECRET', type: 'inherit' }, { name: 'SECRET', type: 'inherit' }],
+  ]) await assert.rejects(provider.uploadVersionFrom({ metadata: { ...metadata, bindings }, moduleBytes: new Uint8Array([1]), inheritVersionId: id }),
+    { code: 'INVALID_VERSION_UPLOAD' });
+  assert.equal(calls, 0);
+});
+
+test('explicit inheritance preserves declared metadata or refuses it without silent annotation loss or truncation', async () => {
+  let calls = 0;
+  const provider = client(async () => { calls++; return json({ id }); });
+  const upload = metadata => provider.uploadVersionFrom({ metadata, moduleBytes: new Uint8Array([1]), inheritVersionId: id });
+  const base = { main_module: 'worker.mjs', bindings: [] };
+  for (const metadata of [{ ...base, modules: [] }, { ...base, deploy: true }, { ...base, unknown: true }]) {
+    await assert.rejects(upload(metadata), { code: 'UNSUPPORTED_VERSION_UPLOAD_METADATA' });
+  }
+  for (const key of ['workers/commit_sha', 'workers/repository_url']) {
+    await assert.rejects(upload({ ...base, annotations: { [key]: 'fixture' } }), { code: 'UNSUPPORTED_VERSION_UPLOAD_ANNOTATIONS' });
+  }
+  for (const annotations of [{ 'workers/message': 'é'.repeat(501) }, { 'workers/tag': 'é'.repeat(51) }, { 'workers/message': 1 }]) {
+    await assert.rejects(upload({ ...base, annotations }), { code: 'INVALID_VERSION_UPLOAD' });
+  }
+  assert.equal(calls, 0);
+});
+
+test('explicit inheritance receives only bounded JSON metadata and nonempty bounded module bytes', async () => {
+  let calls = 0;
+  const provider = client(async () => { calls++; return json({ id }); });
+  const base = { main_module: 'worker.mjs', bindings: [] };
+  for (const moduleBytes of [undefined, [], new Uint8Array(), new Uint8Array(32 * 1024 * 1024 + 1)]) {
+    await assert.rejects(provider.uploadVersionFrom({ metadata: base, moduleBytes, inheritVersionId: id }), { code: 'INVALID_VERSION_UPLOAD' });
+  }
+  const cycle = { ...base }; cycle.bindings = [cycle];
+  for (const metadata of [null, cycle, { ...base, compatibility_date: undefined },
+    { ...base, bindings: [{ name: 'VALUE', type: 'plain_text', text: 'a'.repeat(4 * 1024 * 1024) }] }]) {
+    await assert.rejects(provider.uploadVersionFrom({ metadata, moduleBytes: new Uint8Array([1]), inheritVersionId: id }), { code: 'INVALID_VERSION_UPLOAD' });
+  }
+  await assert.rejects(provider.uploadVersionFrom(null), { code: 'INVALID_VERSION_UPLOAD' });
+  assert.equal(calls, 0);
+});
+
+test('a refused explicit upload is redacted and never falls back to latest inheritance or deployment', async () => {
+  const calls = [];
+  const provider = client(async url => {
+    calls.push(url);
+    return Response.json({ success: false, errors: [{ code: 10057, message: 'fixture-only-token hidden detail' }] }, { status: 400 });
+  });
+  await assert.rejects(provider.uploadVersionFrom({ metadata: { main_module: 'worker.mjs', bindings: [{ name: 'SECRET', type: 'inherit' }] },
+    moduleBytes: new Uint8Array([1]), inheritVersionId: id }), error => {
+    assert.equal(error.code, 'PROVIDER_OPERATION_REFUSED'); assert.equal(error.status, 400);
+    assert.deepEqual(error.providerCodes, [10057]);
+    assert.ok(!JSON.stringify(error).includes('fixture-only-token')); assert.ok(!String(error).includes('hidden detail'));
+    return true;
+  });
+  assert.deepEqual(calls, [`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/workers/market-561-group/versions?deploy=false`]);
+});
+
+test('explicit creation receives a documented echoed module beyond the ordinary JSON bound', async () => {
+  const moduleBytes = new Uint8Array(3 * 1024 * 1024 + 1).fill(97);
+  let calls = 0;
+  const provider = client(async (_url, init) => {
+    calls++;
+    const body = JSON.parse(init.body);
+    assert.ok(body.modules[0].content_base64.length > 4 * 1024 * 1024);
+    return json({ id, number: 9, created_on: '2026-10-26T00:00:00Z', urls: [], modules: body.modules });
+  });
+  const received = await provider.uploadVersionFrom({ metadata: { main_module: 'worker.mjs', bindings: [] }, moduleBytes, inheritVersionId: id });
+  assert.equal(received.id, id); assert.equal(received.number, 9); assert.equal(calls, 1);
+  assert.ok(Buffer.from(received.modules[0].content_base64, 'base64').equals(Buffer.from(moduleBytes)));
+});
+
+test('explicit creation still cancels a response beyond the bounded module expansion without retry', async () => {
+  let calls = 0, cancelled = false;
+  const provider = client(async () => {
+    calls++;
+    return new Response(new ReadableStream({ cancel() { cancelled = true; } }),
+      { headers: { 'content-length': String(Math.ceil(32 * 1024 * 1024 / 3) * 4 + 4 * 1024 * 1024 + 1) } });
+  });
+  await assert.rejects(provider.uploadVersionFrom({ metadata: { main_module: 'worker.mjs', bindings: [] },
+    moduleBytes: new Uint8Array([1]), inheritVersionId: id }), { code: 'PROVIDER_BODY_LIMIT' });
+  assert.equal(calls, 1); assert.equal(cancelled, true);
+});

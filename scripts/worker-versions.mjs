@@ -7,9 +7,11 @@
  * https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/content/methods/get/
  * https://developers.cloudflare.com/api/resources/workers/subresources/subdomains/
  * https://developers.cloudflare.com/api/resources/workers/subresources/beta/subresources/workers/subresources/versions/methods/get/
+ * https://developers.cloudflare.com/api/resources/workers/subresources/beta/subresources/workers/subresources/versions/methods/create/
  * https://developers.cloudflare.com/workers/versions-and-deployments/version-urls/
  * Script-version inherit resolves LATEST UPLOADED, not necessarily deployed.
- * Strict inherit is mandatory here. The application must check its lease.
+ * Explicit UUID inheritance uses the distinct Workers version operation.
+ * The application must check its lease with either upload capability.
  */
 import { Buffer } from 'node:buffer';
 
@@ -18,6 +20,10 @@ const API = 'https://api.cloudflare.com/client/v4';
 const MAX_JSON = 4 * 1024 * 1024;
 const MAX_CONTENT = 32 * 1024 * 1024;
 const MAX_MODULE_JSON = Math.ceil(MAX_CONTENT / 3) * 4 + MAX_JSON;
+const VERSION_METADATA = new Set(['annotations', 'assets', 'bindings', 'cache_options',
+  'compatibility_date', 'compatibility_flags', 'containers', 'exports', 'limits',
+  'main_module', 'migrations', 'package_dependencies', 'placement', 'usage_model']);
+const VERSION_ANNOTATIONS = new Set(['workers/message', 'workers/tag', 'workers/triggered_by']);
 const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
 
 export class WorkerVersionEffectError extends Error {
@@ -182,6 +188,64 @@ export function createWorkerVersionClient({ accountId, scriptName, token, fetch:
       body.set('metadata', JSON.stringify(metadata));
       body.set('worker.mjs', new Blob([moduleBytes], { type: 'application/javascript+module' }), 'worker.mjs');
       const result = await request('/versions?bindings_inherit=strict', { method: 'POST', body });
+      requireVersion(result?.id);
+      return result;
+    },
+    async uploadVersionFrom(options = {}) {
+      if (!options || typeof options !== 'object' || Array.isArray(options)) throw new WorkerVersionEffectError('INVALID_VERSION_UPLOAD');
+      const { metadata, moduleBytes, inheritVersionId } = options;
+      if (typeof inheritVersionId !== 'string') throw new WorkerVersionEffectError('INVALID_WORKER_VERSION');
+      const selected = requireVersion(inheritVersionId);
+      if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata) ||
+          !(moduleBytes instanceof Uint8Array) || moduleBytes.length === 0 || moduleBytes.length > MAX_CONTENT) {
+        throw new WorkerVersionEffectError('INVALID_VERSION_UPLOAD');
+      }
+      if (Object.keys(metadata).some(key => !VERSION_METADATA.has(key))) {
+        throw new WorkerVersionEffectError('UNSUPPORTED_VERSION_UPLOAD_METADATA');
+      }
+      let retained;
+      try {
+        const encoded = JSON.stringify(metadata, (_key, value) => {
+          if (value === undefined || ['function', 'symbol', 'bigint'].includes(typeof value) ||
+              (typeof value === 'number' && !Number.isFinite(value))) throw new TypeError('Non-JSON metadata');
+          return value;
+        });
+        if (Buffer.byteLength(encoded) > MAX_JSON) throw new TypeError('Metadata limit');
+        retained = JSON.parse(encoded);
+      } catch { throw new WorkerVersionEffectError('INVALID_VERSION_UPLOAD'); }
+      if (!retained || retained.main_module !== 'worker.mjs' || !Array.isArray(retained.bindings)) {
+        throw new WorkerVersionEffectError('INVALID_VERSION_UPLOAD');
+      }
+      if (retained.annotations !== undefined) {
+        const annotations = retained.annotations;
+        if (!annotations || typeof annotations !== 'object' || Array.isArray(annotations) ||
+            Object.keys(annotations).some(key => !VERSION_ANNOTATIONS.has(key))) {
+          throw new WorkerVersionEffectError('UNSUPPORTED_VERSION_UPLOAD_ANNOTATIONS');
+        }
+        if (Object.entries(annotations).some(([key, value]) => typeof value !== 'string' ||
+            (key === 'workers/message' && Buffer.byteLength(value) > 1000) ||
+            (key === 'workers/tag' && Buffer.byteLength(value) > 100))) {
+          throw new WorkerVersionEffectError('INVALID_VERSION_UPLOAD');
+        }
+      }
+      const names = new Set();
+      retained.bindings = retained.bindings.map(binding => {
+        if (!binding || typeof binding.name !== 'string' || !binding.name || names.has(binding.name) ||
+            typeof binding.type !== 'string' || !binding.type ||
+            (binding.version_id !== undefined && (binding.type !== 'inherit' ||
+              typeof binding.version_id !== 'string' || binding.version_id.toLowerCase() !== selected))) {
+          throw new WorkerVersionEffectError('INVALID_VERSION_UPLOAD');
+        }
+        names.add(binding.name);
+        return binding.type === 'inherit' ? { ...binding, version_id: selected } : binding;
+      });
+      const body = { ...retained, modules: [{ name: 'worker.mjs',
+        content_type: 'application/javascript+module', content_base64: Buffer.from(moduleBytes).toString('base64') }] };
+      if (Buffer.byteLength(JSON.stringify(body)) > MAX_MODULE_JSON) throw new WorkerVersionEffectError('INVALID_VERSION_UPLOAD');
+      // This supported JSON operation alone accepts the selected inherit UUID.
+      // Its response can echo modules, so receive the original bounded expansion.
+      const result = await request(`/workers/workers/${scriptName}/versions?deploy=false`,
+        { method: 'POST', body, accountScope: true, limit: MAX_MODULE_JSON });
       requireVersion(result?.id);
       return result;
     },
