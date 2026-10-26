@@ -330,8 +330,8 @@ export async function deployStaticApplication(options = {}) {
   if (options.check) return { worker: candidate.config.name, origin: candidate.canonicalOrigin, files: candidate.manifest.artifactCount, bytes: candidate.manifest.byteCount, stage: 'prepared', manifest: candidate.manifest };
   const env = options.env ?? process.env;
   if (env.CLOUDFLARE_API_TOKEN) return releaseStaticApplication({ ...options, candidate, env });
-  demand(options.envFile, 'Supply the existing scoped token environment or --env-file for the Cloudflare manager');
-  const manager = parseEnv(await readFile(options.envFile, 'utf8'));
+  demand(options.envFile || env.CLOUDFLARE_ACCOUNT_TOKEN_MANAGER, 'Supply the existing scoped token or manager environment, or --env-file for the Cloudflare manager');
+  const manager = options.envFile ? parseEnv(await readFile(options.envFile, 'utf8')) : {};
   let result;
   await withCloudflareToken({ accountId: env.CLOUDFLARE_ACCOUNT_ID ?? manager.CLOUDFLARE_ACCOUNT_ID, managerToken: env.CLOUDFLARE_ACCOUNT_TOKEN_MANAGER ?? manager.CLOUDFLARE_ACCOUNT_TOKEN_MANAGER, accountPermissions: ['Workers Scripts Write'], command: process.execPath, args: [fileURLToPath(import.meta.url)], env, fetchImpl: options.fetchImpl, run: async (_command, _args, scopedEnv) => { result = await releaseStaticApplication({ ...options, candidate, env: scopedEnv }); return 0; } });
   return result;

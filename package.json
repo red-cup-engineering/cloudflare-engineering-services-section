@@ -1,6 +1,6 @@
 {
   "name": "@red-cup-engineering/cloudflare-services-section",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Cloudflare platform services: routing, tunnels, and account inventory for the 561 Group's Cloudflare footprint.",
   "repository": {
     "type": "git",
