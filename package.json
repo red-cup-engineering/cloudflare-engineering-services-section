@@ -1,6 +1,6 @@
 {
   "name": "@red-cup-engineering/cloudflare-services-section",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Cloudflare platform services: routing, tunnels, and account inventory for the 561 Group's Cloudflare footprint.",
   "repository": {
     "type": "git",
@@ -17,7 +17,8 @@
     "./derive-cloudflare-account-inventory": "./scripts/derive-cloudflare-account-inventory.mjs",
     "./pay-per-crawl-exclusion": "./scripts/derive-pay-per-crawl-exclusion.mjs",
     "./receive-pay-per-crawl-exclusion": "./scripts/receive-pay-per-crawl-exclusion.mjs",
-    "./canonical-host": "./scripts/canonical-host.mjs"
+    "./canonical-host": "./scripts/canonical-host.mjs",
+    "./static-application-release": "./scripts/deploy-static-application.mjs"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs"
@@ -25,21 +26,33 @@
   "dependencies": {
     "@red-cup-engineering/computer-file-engineering-services-section": "0.4.0",
     "@red-cup-engineering/http-services-section": "0.6.2",
-    "@red-cup-engineering/javascript-node-operation-engineering-services-section": "0.2.0"
+    "@red-cup-engineering/javascript-node-operation-engineering-services-section": "0.2.0",
+    "@red-cup-engineering/json-services-section": "0.4.0",
+    "@red-cup-engineering/uri-services-section": "0.1.1",
+    "@red-cup-engineering/web-release-candidate-service": "0.3.2",
+    "@red-cup-engineering/static-site-conformance-service": "0.1.2",
+    "jsonc-parser": "3.3.1",
+    "wrangler": "4.127.1"
   },
   "receivingTests": [
-    "test/observation-environment.test.mjs"
+    "test/observation-environment.test.mjs",
+    "test/static-application-release.test.mjs"
   ],
   "private": false,
   "files": [
     "package.json",
     "README*",
     "LICENSE*",
-    "scripts"
+    "scripts",
+    "test/observation-environment.test.mjs",
+    "test/static-application-release.test.mjs"
   ],
   "license": "MIT",
   "funding": {
     "type": "individual",
     "url": "https://github.com/561-group/.github/blob/main/TIPS.md"
+  },
+  "bin": {
+    "deploy-cloudflare-static-application": "./scripts/deploy-static-application.mjs"
   }
 }

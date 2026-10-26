@@ -201,3 +201,52 @@ node scripts/with-cloudflare-token.mjs --env-file /home/emsenn/info/.env \
 Setting routes needs `Workers Routes Write` on each routed zone. `8e323e4e37ce16cc4fb4c51aa5d28b23` is `koios.news`, currently the only routed zone. A new apex in the estate needs its own zone ID added. Without that permission the Worker uploads, but the routes call is refused and existing routes stay as they are.
 
 The capability was received from Coesite Operations (`services/canonical-host-services-section`, commit `4f5ec872`), where it was misplaced. The estate is its only input.
+
+## Static application release
+
+`./static-application-release` builds a native WebReleaseManifest for an existing
+asset-only Wrangler application, uploads a version, reads that version through
+its Workers URL, and promotes the received version to the existing custom
+domains. Public receiving runs after promotion. A failed public receiving
+restores the previous version while retaining the candidate for diagnosis.
+
+The operation consumes the original Web Release Candidate and Static Site
+Conformance services. Wrangler owns upload and version activation. This
+section owns the provider reads, existing custom-domain matching, scoped
+credential lifecycle and the release invocation. The operation leaves routes
+and bindings in place; configuration containing a handler, storage binding or
+build hook belongs to its corresponding application deployment owner.
+
+The package exports `prepareStaticApplication`, `releaseStaticApplication` and
+`deployStaticApplication`. The convenience operation accepts `{configPath,
+source, canonicalOrigin, envFile?, check?}`. `source` is the existing public
+release source shape: `{repository, revision, build: {command, outputRoot}}`.
+It accepts JSON/JSONC Wrangler files and a dedicated assets directory.
+
+```sh
+deploy-cloudflare-static-application --config wrangler.jsonc --source source.json \
+  --env-file /home/emsenn/info/.env
+```
+
+An already injected `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` use the
+same path. `--env-file` invokes the existing scoped manager helper; the manager
+credential stays outside Wrangler and its temporary token is revoked after
+the operation. The temporary token has `Workers Scripts Write` on the selected
+account, which covers static asset upload and the existing Worker reads.
+Version previews are enabled only for candidate receiving when the provider
+has them disabled. Their previous setting is restored before promotion,
+preserving the existing workers.dev route. `--check` prepares the artifact
+and checks its local links without provider calls.
+
+Release state and sealed upload files live under `.wrangler/static-release/`
+beside the application configuration, outside the public assets. Repeating a
+completed release receives the current public bytes without uploading or
+activating another version. An interrupted upload with Wrangler's completion
+record resumes that version. An interrupted promotion is reconciled against
+the provider's current deployment. A changed existing domain or another active
+version stops that invocation before further promotion.
+
+The original Cloudflare mechanisms are documented at
+[version upload and deployment](https://developers.cloudflare.com/workers/versions-and-deployments/),
+[structured Wrangler output](https://developers.cloudflare.com/workers/wrangler/system-environment-variables/),
+and [Worker domains](https://developers.cloudflare.com/api/resources/workers/subresources/domains/methods/list/).
