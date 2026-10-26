@@ -36,7 +36,9 @@
     "package.json",
     "README*",
     "LICENSE*",
-    "scripts"
+    "scripts",
+    "test/observation-environment.test.mjs",
+    "test/observe-kv-operations.test.mjs"
   ],
   "license": "MIT",
   "funding": {
