@@ -62,6 +62,32 @@ economic-receiving owners with separate current quota, authority and cost eviden
 The API path is the [Cloudflare Worker script-and-version settings GET](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/);
 the per-type identity fields come from its published Workers binding model.
 
+### KV operation pressure without inventing capacity
+
+The **same** Cloudflare account-inventory export now admits
+`observeCloudflareKvOperations({accountId,day,tokenEnvironmentVariable})`
+for one canonical UTC day using the provider's read-only
+`kvOperationsAdaptiveGroups` GraphQL API. It requires an existing authorized
+**Account Analytics Read** token supplied by its environment variable name,
+not the credential in arguments. Invoke it only through the established scoped
+credential custody. It does not perform KV PUTs, buy usage, or alter a Worker.
+
+The source returns provider-reported request aggregates by namespace, action
+and day; current-day readings are partial. A well-formed empty historical
+result reports **zero analytics groups**, while missing token, permission,
+response, retention or incomplete pagination/row coverage refuses as unknown.
+Match observed namespace IDs to the original
+`deriveCloudflareWorkerStorageBindings` result for *possible* producer
+responsibility, not proof that any Worker generated an operation. Do not
+conflate aggregated KV requests with account allowance remaining, billed
+usage, accepted Work, human ad views, subscriptions or settled revenue.
+
+Original provider basis:
+[KV Analytics](https://developers.cloudflare.com/kv/observability/metrics-analytics/),
+[GraphQL scoped authentication](https://developers.cloudflare.com/analytics/graphql-api/getting-started/authentication/api-token-auth/).
+Exact account operation receiving and native package tests remain separate
+release prerequisites; fixture assays are not live Cloudflare evidence.
+
 ## Free-first public receiver procedure
 
 Cloudflare Worker Assets is the presently demonstrated free-cloud receiver for
