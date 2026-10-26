@@ -173,11 +173,9 @@ test('a promotion completed before Wrangler errors is received in the same invoc
   assert.ok(runtime.publicReads.some(item => item.hostname === 'sample.example.com' && item.active === after));
 });
 
-test('the existing manager grants account-scoped script upload permission and revokes it after release', async t => {
-  const { root, candidate } = await fixture(t);
+test('an injected existing manager grants account-scoped script upload permission and revokes it after release', async t => {
+  const { candidate } = await fixture(t);
   const runtime = provider(candidate);
-  const envFile = join(root, 'manager.env');
-  await writeFile(envFile, `CLOUDFLARE_ACCOUNT_ID=${env.CLOUDFLARE_ACCOUNT_ID}\nCLOUDFLARE_ACCOUNT_TOKEN_MANAGER=fixture-manager\n`);
   const managerCalls = [];
   const fetchImpl = async (url, options) => {
     if (new URL(url).pathname.includes('/tokens')) {
@@ -191,7 +189,7 @@ test('the existing manager grants account-scoped script upload permission and re
     if (new URL(url).hostname === 'api.cloudflare.com') assert.equal(options.headers.authorization, `Bearer ${env.CLOUDFLARE_API_TOKEN}`);
     return runtime.fetchImpl(url, options);
   };
-  const result = await deployStaticApplication({ configPath: candidate.configPath, source, env: {}, envFile, fetchImpl, run: runtime.run, report: () => {} });
+  const result = await deployStaticApplication({ configPath: candidate.configPath, source, env: { CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_ACCOUNT_TOKEN_MANAGER: 'fixture-manager' }, fetchImpl, run: runtime.run, report: () => {} });
   assert.equal(result.stage, 'released');
   const grant = JSON.parse(managerCalls.find(item => item.method === 'POST').body);
   assert.deepEqual(grant.policies, [{ effect: 'allow', resources: { [`com.cloudflare.api.account.${env.CLOUDFLARE_ACCOUNT_ID}`]: '*' }, permission_groups: [{ id: 'script-write' }] }]);
