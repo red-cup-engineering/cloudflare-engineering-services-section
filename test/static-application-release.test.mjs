@@ -65,7 +65,7 @@ function provider(candidate, { failCanonical = false, wrongDomain = false, worke
     active = version;
     return [];
   };
-  return { fetchImpl, run, commands, publicReads, previewChanges, previewSettings: () => previewSettings, active: () => active };
+  return { publicReceivingAttempts: 1, publicReceivingDelayMs: 0, fetchImpl, run, commands, publicReads, previewChanges, previewSettings: () => previewSettings, active: () => active };
 }
 const env = { CLOUDFLARE_ACCOUNT_ID: 'a'.repeat(32), CLOUDFLARE_API_TOKEN: 'scoped-fixture-token' };
 
@@ -194,4 +194,71 @@ test('an injected existing manager grants account-scoped script upload permissio
   const grant = JSON.parse(managerCalls.find(item => item.method === 'POST').body);
   assert.deepEqual(grant.policies, [{ effect: 'allow', resources: { [`com.cloudflare.api.account.${env.CLOUDFLARE_ACCOUNT_ID}`]: '*' }, permission_groups: [{ id: 'script-write' }] }]);
   assert.equal(managerCalls.at(-1).method, 'DELETE');
+});
+
+test('public release with multiple attempts succeeds after transient propagation errors', async t => {
+  const { candidate } = await fixture(t);
+  let canonicalReads = 0;
+  const runtime = provider(candidate);
+  const originalFetch = runtime.fetchImpl;
+  runtime.fetchImpl = async (url, options) => {
+    const response = await originalFetch(url, options);
+    const reqUrl = new URL(url);
+    if (reqUrl.hostname === 'sample.example.com') {
+      canonicalReads++;
+      if (canonicalReads <= 2) {
+        return new Response('wrong version', { headers: { 'content-type': 'text/html', 'x-content-type-options': 'nosniff' } });
+      }
+    }
+    return response;
+  };
+  const result = await releaseStaticApplication({ candidate, env, ...runtime, report: () => {}, publicReceivingAttempts: 3, publicReceivingDelayMs: 0 });
+  assert.equal(result.stage, 'released');
+  assert.equal(runtime.active(), after);
+  assert.equal(runtime.commands.length, 2);
+  assert.equal(canonicalReads, 2 * candidate.artifacts.filter(item => !['_headers', '_redirects'].includes(item.path)).length);
+});
+
+test('persistent wrong canonical with attempts 2 rejects and rolls back exact baseline', async t => {
+  const { root, candidate } = await fixture(t);
+  const runtime = provider(candidate, { failCanonical: true });
+  let publicReadCount = 0;
+  const originalFetch = runtime.fetchImpl;
+  runtime.fetchImpl = async (url, options) => {
+    const res = await originalFetch(url, options);
+    if (new URL(url).hostname === 'sample.example.com') publicReadCount++;
+    return res;
+  };
+  await assert.rejects(releaseStaticApplication({ candidate, env, ...runtime, report: () => {}, publicReceivingAttempts: 2, publicReceivingDelayMs: 0 }), /Deployed static assets do not match/);
+  assert.equal(runtime.active(), before);
+  assert.equal(publicReadCount, 2 * candidate.artifacts.filter(item => !['_headers', '_redirects'].includes(item.path)).length);
+});
+
+test('concurrent foreign version change observed by api snapshot between attempts refuses immediately', async t => {
+  const { candidate } = await fixture(t);
+  const runtime = provider(candidate, { failCanonical: true });
+  let sawCanonical = false;
+  const originalFetch = runtime.fetchImpl;
+  runtime.fetchImpl = async (url, options) => {
+    const reqUrl = new URL(url);
+    if (reqUrl.hostname === 'sample.example.com') sawCanonical = true;
+    if (reqUrl.pathname.endsWith('/deployments')) {
+      if (sawCanonical) {
+        return Response.json({ success: true, result: { deployments: [{ id: 'deployment-foreign', versions: [{ version_id: '33333333-3333-4333-8333-333333333333', percentage: 100 }] }] } });
+      }
+    }
+    return originalFetch(url, options);
+  };
+  await assert.rejects(releaseStaticApplication({ candidate, env, ...runtime, report: () => {}, publicReceivingAttempts: 3, publicReceivingDelayMs: 0 }), /Another Worker version became active while rollback was pending/);
+  assert.equal(runtime.commands.length, 2, 'No rollback overwrites a foreign deployment');
+});
+
+test('options invalid refuse before writes', async t => {
+  const { candidate } = await fixture(t);
+  const runtime = provider(candidate);
+  await assert.rejects(releaseStaticApplication({ candidate, env, ...runtime, publicReceivingAttempts: 0 }), /Public receiving attempts must be between 1 and 12/);
+  await assert.rejects(releaseStaticApplication({ candidate, env, ...runtime, publicReceivingAttempts: 13 }), /Public receiving attempts must be between 1 and 12/);
+  await assert.rejects(releaseStaticApplication({ candidate, env, ...runtime, publicReceivingDelayMs: -1 }), /Public receiving delay must be between 0 and 5000 ms/);
+  await assert.rejects(releaseStaticApplication({ candidate, env, ...runtime, publicReceivingDelayMs: 5001 }), /Public receiving delay must be between 0 and 5000 ms/);
+  assert.deepEqual(runtime.commands, []);
 });

@@ -45,6 +45,8 @@ These API operations offer no compare-and-swap deployment lease. Applications mu
 
 Writes are never automatically retried. A transport or JSON failure can leave the effect unknown; the caller must observe the provider before choosing recovery. Errors retain only local classification, HTTP status and numeric provider codes. They never include tokens, request headers, raw provider bodies, or transport causes.
 
+Static application promotion has a bounded public propagation window. The original release service makes up to twelve complete public receiving attempts, separated by 2.5 seconds, without repeating uploads or promotions. Before each attempt it verifies that the selected version and baseline routes still own the release. Every successful public observation must match the entire native manifest, including status, media type, byte length and digest. Persistent mismatch follows the existing journaled rollback; a foreign version or route change refuses restoration over another deployment. Callers may select fewer attempts or a shorter delay within the declared bounds. Preview receiving remains immediate. Tests inject zero delay and verify transient recovery, persistent rollback, foreign-deployment refusal and invalid policy rejection.
+
 Direct receiving cases are in `test/worker-versions.test.mjs`. Run the file directly when a surrounding test harness reports only child-file counts, so the declared cases and assertions are visible.
 
 ## Source receiving, 2026-10-26

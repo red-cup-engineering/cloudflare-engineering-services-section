@@ -170,7 +170,9 @@ function receipt(release, providerVersion, routeDigest, candidateOrigin) {
 }
 
 /** Upload and receive a version, then promote that exact version on existing domains. */
-export async function releaseStaticApplication({ candidate, env = process.env, stateDirectory, fetchImpl = fetch, expectedHeaders = {}, timeoutMs = 300000, report = message => process.stderr.write(message), run = runWrangler } = {}) {
+export async function releaseStaticApplication({ candidate, env = process.env, stateDirectory, fetchImpl = fetch, expectedHeaders = {}, timeoutMs = 300000, publicReceivingAttempts = 12, publicReceivingDelayMs = 2500, report = message => process.stderr.write(message), run = runWrangler } = {}) {
+  demand(Number.isSafeInteger(publicReceivingAttempts) && publicReceivingAttempts >= 1 && publicReceivingAttempts <= 12, 'Public receiving attempts must be between 1 and 12');
+  demand(Number.isSafeInteger(publicReceivingDelayMs) && publicReceivingDelayMs >= 0 && publicReceivingDelayMs <= 5000, 'Public receiving delay must be between 0 and 5000 ms');
   demand(candidate?.manifest, 'A prepared static application is required');
   demand(Number.isSafeInteger(timeoutMs) && timeoutMs > 0, 'Wrangler timeout must be a positive integer');
   const accountId = env.CLOUDFLARE_ACCOUNT_ID ?? candidate.config.account_id;
@@ -306,9 +308,27 @@ export async function releaseStaticApplication({ candidate, env = process.env, s
     demand(active.providerVersion === versionId && active.routeDigest === state.baseline.routeDigest, 'Cloudflare did not activate the selected version on the existing domains');
     state.activeReceipt = receipt(release, versionId, active.routeDigest); state.stage = 'active'; await save(statePath, state);
     try {
-      state.receiverObservation = await receive(candidate, release, candidate.canonicalOrigin, fetchImpl, expectedHeaders);
-      const accepted = decidePublicRelease({ release, activeReceipt: state.activeReceipt, receiverObservation: state.receiverObservation });
-      demand(accepted.disposition === 'no-op', `Public release receiving failed: ${accepted.requirements.join('; ')}`);
+      let lastError;
+      for (let attempt = 1; attempt <= publicReceivingAttempts; attempt++) {
+        const currentSnapshot = await snapshot(api, candidate);
+        demand(currentSnapshot.providerVersion === versionId, 'Selected version is no longer active before native receiving');
+        demand(currentSnapshot.routeDigest === state.baseline.routeDigest, 'Baseline route digest changed before native receiving');
+        try {
+          state.receiverObservation = await receive(candidate, release, candidate.canonicalOrigin, fetchImpl, expectedHeaders);
+          const accepted = decidePublicRelease({ release, activeReceipt: state.activeReceipt, receiverObservation: state.receiverObservation });
+          demand(accepted.disposition === 'no-op', `Public release receiving failed: ${accepted.requirements.join('; ')}`);
+          lastError = undefined;
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt === publicReceivingAttempts) throw error;
+          report(`Awaiting static release propagation (attempt ${attempt}/12)\n`);
+          if (publicReceivingDelayMs > 0) {
+            await new Promise(resolveDelay => setTimeout(resolveDelay, publicReceivingDelayMs));
+          }
+        }
+      }
+      if (lastError) throw lastError;
     } catch (error) {
       // Record the failed candidate before rollback can change traffic. A
       // resumed invocation must finish this restoration, never promote again.
