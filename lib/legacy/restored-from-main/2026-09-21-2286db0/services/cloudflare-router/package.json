@@ -1,0 +1,16 @@
+{
+  "name": "@561-group/cloudflare-router",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Tiny Cloudflare Worker that routes play/crucible/solitaire/gambling-trainer.561.group to their matching Cloud Run services. Carries no application logic of its own.",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check src/index.mjs",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "dependencies": {
+    "wrangler": "4.123.0",
+    "@lenticule-science/metrologic": "file:../../../../../../../../../computer-math-system-services-section/apps/metrologic"
+  }
+}

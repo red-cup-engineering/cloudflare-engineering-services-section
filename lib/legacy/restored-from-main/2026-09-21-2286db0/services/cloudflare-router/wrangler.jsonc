@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cloudflare-router-561-group",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-08-04",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "routes": [
+    { "pattern": "ruinfold.play.561.group", "custom_domain": true },
+    { "pattern": "farstone.561.group", "custom_domain": true },
+    { "pattern": "durante.play.561.group", "custom_domain": true },
+    { "pattern": "aletheon.561.group", "custom_domain": true },
+    { "pattern": "casino.play.561.group", "custom_domain": true }
+  ]
+}
