@@ -38,7 +38,8 @@
   "receivingTests": [
     "test/observation-environment.test.mjs",
     "test/static-application-release.test.mjs",
-    "test/worker-versions.test.mjs"
+    "test/worker-versions.test.mjs",
+    "test/observe-kv-operations.test.mjs"
   ],
   "private": false,
   "files": [
@@ -48,7 +49,8 @@
     "scripts",
     "test/observation-environment.test.mjs",
     "test/static-application-release.test.mjs",
-    "test/worker-versions.test.mjs"
+    "test/worker-versions.test.mjs",
+    "test/observe-kv-operations.test.mjs"
   ],
   "license": "MIT",
   "funding": {

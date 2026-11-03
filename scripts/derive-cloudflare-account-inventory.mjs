@@ -419,6 +419,163 @@ export async function observeCloudflareR2Buckets(request, { environment = proces
   return refusal("CLOUDFLARE_R2_BUCKET_COVERAGE_INVALID",{reason:"page-limit"});
 }
 
+
+/**
+ * Observe provider-native Workers KV operations by namespace and action
+ * within ONE UTC day. A Cloudflare GraphQL analytics aggregate is not a
+ * billing receipt, remaining quota, accepted customer service, or proof
+ * identifying which Worker wrote a namespace. No KV content is requested.
+ *
+ * The existing Worker→binding reader gives possible owners; only source
+ * and independently received service evidence can justify attribution.
+ * @see https://developers.cloudflare.com/kv/observability/metrics-analytics/
+ */
+const CLOUDFLARE_KV_GRAPHQL_LIMIT = 1000;
+const CLOUDFLARE_KV_ANALYTICS_BODY_LIMIT = 262144;
+const CLOUDFLARE_KV_OPERATIONS_QUERY = `query GroupKvOperations($accountTag: string!, $day: Date!) {
+  viewer {
+    accounts(filter: { accountTag: $accountTag }) {
+      kvOperationsAdaptiveGroups(
+        filter: { date_geq: $day, date_leq: $day },
+        limit: 1000
+      ) {
+        dimensions { date namespaceId actionType }
+        sum { requests }
+      }
+    }
+  }
+}`;
+
+/** Fail an unexpectedly large provider body before it becomes a false zero
+ * or a multi-megabyte in-memory telemetry projection. Streaming is native
+ * Fetch, not another HTTP/GraphQL client or dependency. */
+async function readCloudflareGraphqlBody(response) {
+  const header = response.headers?.get?.("content-length");
+  if (header !== null && header !== undefined &&
+      (!/^[0-9]+$/u.test(header) || Number(header) > CLOUDFLARE_KV_ANALYTICS_BODY_LIMIT)) {
+    try { await response.body?.cancel?.(); } catch { /* refusal already decided */ }
+    return null;
+  }
+  if (typeof response.body?.getReader !== "function") return null;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let length = 0, contents = "";
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (!(value instanceof Uint8Array)) return null;
+      length += value.byteLength;
+      if (length > CLOUDFLARE_KV_ANALYTICS_BODY_LIMIT) {
+        try { await reader.cancel(); } catch { /* remain refused */ }
+        return null;
+      }
+      contents += decoder.decode(value, { stream: true });
+    }
+    contents += decoder.decode();
+    return JSON.parse(contents);
+  } catch {
+    try { await reader.cancel(); } catch { /* remain refused */ }
+    return null;
+  } finally {
+    try { reader.releaseLock(); } catch { /* nothing else to consume */ }
+  }
+}
+
+/**
+ * Read one day of actual Cloudflare analytics via a pre-authorized
+ * Account Analytics Read token, NEVER the token value as caller input.
+ * The provider's daily operation groups are estimates/counters, not
+ * charged usage. A missing/incomplete response is UNKNOWN, not zero.
+ */
+export async function observeCloudflareKvOperations(
+  request, { environment = process.env, now = () => new Date() } = {},
+) {
+  requireObject(request,"request");
+  const accountId = requireNonEmptyString(request.accountId,"request.accountId");
+  if (!ACCOUNT_ID_PATTERN.test(accountId))
+    throw new TypeError("KV operations require an exact 32-hex Cloudflare account id");
+  const day = request.day;
+  if (typeof day !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(day) ||
+      !Number.isFinite(Date.parse(day + "T00:00:00.000Z")) ||
+      new Date(day + "T00:00:00.000Z").toISOString().slice(0,10) !== day)
+    throw new TypeError("KV operations require one canonical UTC day");
+  const variable = requireNonEmptyString(
+    request.tokenEnvironmentVariable,"request.tokenEnvironmentVariable");
+  const snapshot = now();
+  if (!(snapshot instanceof Date) || !Number.isFinite(snapshot.getTime()))
+    throw new TypeError("KV operations require a valid observation clock");
+  const ageInUtcDays = (Date.parse(snapshot.toISOString().slice(0,10) + "T00:00:00Z") -
+    Date.parse(day + "T00:00:00Z")) / 86400000;
+  if (ageInUtcDays < 0 || ageInUtcDays > 30)
+    return refusal("CLOUDFLARE_KV_ANALYTICS_OUTSIDE_RETENTION",{day});
+  const token = environment[variable];
+  if (typeof token !== "string" || !token.length)
+    return refusal("TOKEN_ENVIRONMENT_VARIABLE_UNSET",{tokenEnvironmentVariable:variable});
+  let response, body;
+  try {
+    response = await (request.fetch ?? fetch)(
+      "https://api.cloudflare.com/client/v4/graphql",{
+        method:"POST",
+        headers:{authorization:`Bearer ${token}`,"content-type":"application/json"},
+        body:JSON.stringify({query:CLOUDFLARE_KV_OPERATIONS_QUERY,variables:{
+          accountTag:accountId,day,
+        }}),
+        signal:AbortSignal.timeout(10000),
+      });
+    if (response?.ok !== true)
+      return refusal("CLOUDFLARE_KV_ANALYTICS_UNAVAILABLE",{reason:"provider-refusal"});
+    body = await readCloudflareGraphqlBody(response);
+  } catch {
+    return refusal("CLOUDFLARE_KV_ANALYTICS_UNAVAILABLE",{reason:"transport-or-decode"});
+  }
+  if (body === null)
+    return refusal("CLOUDFLARE_KV_ANALYTICS_UNAVAILABLE",{reason:"response-unreadable-or-oversize"});
+  if (!body || typeof body !== "object" || Array.isArray(body) ||
+      (body.errors !== undefined && (!Array.isArray(body.errors) || body.errors.length > 0)))
+    return refusal("CLOUDFLARE_KV_ANALYTICS_UNAVAILABLE",{reason:"provider-graphql-refusal"});
+  const accounts=body.data?.viewer?.accounts;
+  if (!Array.isArray(accounts) || accounts.length !== 1 ||
+      !accounts[0] || typeof accounts[0] !== "object" || Array.isArray(accounts[0]))
+    return refusal("CLOUDFLARE_KV_ANALYTICS_INVALID",{reason:"account-coverage"});
+  const rows=accounts[0].kvOperationsAdaptiveGroups;
+  if (!Array.isArray(rows))
+    return refusal("CLOUDFLARE_KV_ANALYTICS_INVALID",{reason:"operation-coverage"});
+  if (rows.length >= CLOUDFLARE_KV_GRAPHQL_LIMIT)
+    return refusal("CLOUDFLARE_KV_ANALYTICS_LIMIT",{reason:"result-limit-may-truncate"});
+  const seen=new Set(),groups=[];
+  let aggregate=0;
+  for (const row of rows) {
+    const { namespaceId, actionType, date }=row?.dimensions??{};
+    const requests=row?.sum?.requests;
+    if (date!==day || typeof namespaceId!=="string" ||
+        !ACCOUNT_ID_PATTERN.test(namespaceId) ||
+        typeof actionType!=="string" || !/^[a-z][a-z0-9_-]{0,31}$/u.test(actionType) ||
+        !Number.isSafeInteger(requests) || requests < 0)
+      return refusal("CLOUDFLARE_KV_ANALYTICS_INVALID",{reason:"invalid-operation-group"});
+    const dimension=JSON.stringify([namespaceId.toLowerCase(),actionType,date]);
+    if (seen.has(dimension))
+      return refusal("CLOUDFLARE_KV_ANALYTICS_INVALID",{reason:"duplicate-operation-group"});
+    seen.add(dimension);
+    if (!Number.isSafeInteger(aggregate+requests))
+      return refusal("CLOUDFLARE_KV_ANALYTICS_INVALID",{reason:"aggregate-overflow"});
+    aggregate+=requests;
+    groups.push(Object.freeze({namespaceId:namespaceId.toLowerCase(),actionType,requests}));
+  }
+  groups.sort((a,b)=>a.namespaceId.localeCompare(b.namespaceId) ||
+    a.actionType.localeCompare(b.actionType));
+  return Object.freeze({
+    type:"CloudflareKvOperationsObservation",version:1,accountId,day,
+    observedAt:snapshot.toISOString(),
+    coverage:ageInUtcDays===0?"partial-day-analytics":"historical-day-analytics",
+    groups:Object.freeze(groups),analyticsReportedRequests:aggregate,
+    // Historical GraphQL aggregates may lag, sample, or differ from
+    // commercial accounting. A complete schema is not evidence of settlement.
+    providerAnalyticsLag:"unknown",writerAttribution:"unverified",
+    freeTierHeadroom:"unknown",chargedUsage:"unknown",acceptedService:"unknown",
+  });
+}
+
 if (import.meta.main) {
   const { runJavascriptNodeOperation } = await import("@red-cup-engineering/javascript-node-operation-engineering-services-section/operation");
   const result = await runJavascriptNodeOperation({ name: "derive-cloudflare-account-inventory", description: "Derives one CloudflareAccountInventory record -- zones, their DNS records, Workers scripts, and Workers custom domains -- for one Cloudflare account, reading the API token from the named environment variable and refusing rather than throwing on an unset token or a non-success API body.", operation: deriveCloudflareAccountInventory }, { arguments: process.argv.slice(2), standardInput: process.stdin, standardOutput: process.stdout });

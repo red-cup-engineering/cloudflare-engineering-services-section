@@ -315,3 +315,20 @@ test("refuses an empty tokenEnvironmentVariable", async () => {
 - `refuses-empty-token-environment-variable-name` -> projection `jsnode-operation-package`; acceptance `jsnode-package-assays`; constraints `node-esm-operation`
 - `unset-token-is-a-refusal-not-a-throw` -> projection `jsnode-operation-package`; acceptance `jsnode-package-assays`; constraints `handwritten-state-surveys-are-the-debt`
 - `no-live-calls-in-tests` -> projection `jsnode-operation-package`; acceptance `jsnode-package-assays`; constraints `whatwg-fetch-standard`
+
+
+## 2026-10-24 capacity-feedback extension — provider-native KV operations
+
+This amends the **existing** Cloudflare account inventory operation (not a second meter, allocation ledger, alert service or permission source) after a real Workers KV Free account exhaustion notice on 2026-10-24. The installed Worker-binding observation enumerates possible consumers but cannot measure who exhausted the account-level PUT quota. The source-owned next observation uses Cloudflare's documented GraphQL `kvOperationsAdaptiveGroups`, grouped by `namespaceId`, `date`, `actionType`, and `sum.requests`. Source: https://developers.cloudflare.com/kv/observability/metrics-analytics/ ; minimum permission: Account Analytics Read, https://developers.cloudflare.com/analytics/graphql-api/getting-started/authentication/api-token-auth/ .
+
+### Requirements and design
+
+- **R-KV-1**: A caller selects exactly one canonical UTC calendar day within the last 31-day retention horizon and one exact 32-hex account ID; it supplies only the **name** of the scoped API-token environment variable. Never take a credential value as input. One authenticated GraphQL analytics query reads native namespace/action dimensions and request aggregates, with no KV content, provider mutation, installation or new billing.
+- **R-KV-2**: Bound transport time, result rows and decoded body size. Refuse malformed dates, unrecoverable API/GraphQL errors, missing account coverage, invalid numeric counts, duplicated dimensions and a saturated result limit. Provider failure, partial/missing data and denied account access are **unknown**, never observed zero.
+- **R-KV-3**: Preserve native namespace IDs and action types. Report per-namespace operation counts only for genuinely admitted complete aggregate responses. Current UTC day is partial; earlier days are historical analytics (which may lag or sample). **No client may equate analytics operation sums with settled charges, remaining Free allowance, identity of a Worker writer, goodput, accepted human views, customer payments, or corporate net margin.** The existing Worker→storage binding read may contextualize namespaces but not independently prove producer causation.
+- **R-KV-4**: Maintain the original Cloudflare read-only owner, no delegated administration or data transfer; document read-only Account Analytics scope through the existing short-lived token path. No real provider read is authorized from a test. Avoid logging response bodies, error strings or tokens.
+- **R-KV-5**: Native negative/normal tests require: eligible account/day produces independently grouped exact action counts; valid empty completed-day data is a qualified reported zero (not absence of entire account); missing token/refused GraphQL/incomplete cap fail closed; invalid date and duplicate counts fail; time-to-reset/partial day is explicit. A load fixture at the bounded row cap must refuse false completeness.
+
+### Evidence and receiving
+
+Source and fixture tests provide only **candidate analytic capability**, not actual Cloudflare usage. The original credentialed operator must execute one read with an Account Analytics Read token, independently receive provider response/retention/coverage, reconcile the actual three known KV-bound Workers and four namespaces against namespace/action totals, then identify the highest *measured* contributing namespace. Only original source owners may right-size its writes; independent buyer/customer receiver and finance reconcile verified effects, costs and acceptance. Do not purchase plan capacity or label a subtotal "bill" from GraphQL alone.
