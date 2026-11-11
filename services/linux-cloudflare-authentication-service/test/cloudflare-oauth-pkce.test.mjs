@@ -1,4 +1,4 @@
-import { createHttpServer } from "@red-cup-engineering/http-services-section/node-server";
+import { createHttpServer } from "@red-cup-engineering/http-engineering-services-section/node-server";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";

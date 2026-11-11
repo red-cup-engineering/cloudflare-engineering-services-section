@@ -1,5 +1,5 @@
 import { derivePayPerCrawlExclusion } from "./derive-pay-per-crawl-exclusion.mjs";
-import { fetchWithoutRedirects } from "@red-cup-engineering/http-services-section/fetch-without-redirects";
+import { fetchWithoutRedirects } from "@red-cup-engineering/http-engineering-services-section/fetch-without-redirects";
 
 const API = "https://api.cloudflare.com/client/v4";
 const ZONE = /^[a-fA-F0-9]{32}$/u;

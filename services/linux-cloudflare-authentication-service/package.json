@@ -40,7 +40,7 @@
     "@red-cup-engineering/cbor-services-section": "^0.1.1",
     "@red-cup-engineering/cryptographic-computer-data-engineering-services-section": "^0.3.3",
     "@red-cup-engineering/computer-file-engineering-services-section": "^0.8.4",
-    "@red-cup-engineering/http-services-section": "^0.6.4",
+    "@red-cup-engineering/http-engineering-services-section": "^0.6.5-dev.2",
     "wrangler": "^4.114.0",
     "@red-cup-engineering/computer-content-address-engineering-services-section": "^0.2.3"
   },

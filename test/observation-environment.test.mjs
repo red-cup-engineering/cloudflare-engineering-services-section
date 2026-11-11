@@ -22,7 +22,7 @@ for(const reader of readers)test(`${reader.name} uses one explicit environment w
 test('the original CLI selects the independent operation runtime without a legacy fallback',async()=>{
   const {readFile}=await import('node:fs/promises');
   const source=await readFile(new URL('../scripts/derive-cloudflare-account-inventory.mjs',import.meta.url),'utf8');
-  const runtime='@red-cup-engineering/javascript-node-operation-engineering-services-section/operation';
+  const runtime='@red-cup-engineering/node-js-function-engineering-services-section/operation';
   assert.equal(source.split(runtime).length-1,1,'one original CLI binding selects the independent runtime');
   assert.equal(source.includes('@red-cup-engineering/javascript-node-services-section/operation'),false);
 });

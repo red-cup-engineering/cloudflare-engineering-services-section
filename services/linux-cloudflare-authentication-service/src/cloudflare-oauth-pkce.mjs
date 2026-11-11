@@ -1,4 +1,4 @@
-import { createHttpServer } from "@red-cup-engineering/http-services-section/node-server";
+import { createHttpServer } from "@red-cup-engineering/http-engineering-services-section/node-server";
 import { createHash, randomBytes } from "node:crypto";
 
 

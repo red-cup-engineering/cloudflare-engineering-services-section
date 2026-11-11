@@ -577,7 +577,7 @@ export async function observeCloudflareKvOperations(
 }
 
 if (import.meta.main) {
-  const { runJavascriptNodeOperation } = await import("@red-cup-engineering/javascript-node-operation-engineering-services-section/operation");
+  const { runJavascriptNodeOperation } = await import("@red-cup-engineering/node-js-function-engineering-services-section/operation");
   const result = await runJavascriptNodeOperation({ name: "derive-cloudflare-account-inventory", description: "Derives one CloudflareAccountInventory record -- zones, their DNS records, Workers scripts, and Workers custom domains -- for one Cloudflare account, reading the API token from the named environment variable and refusing rather than throwing on an unset token or a non-success API body.", operation: deriveCloudflareAccountInventory }, { arguments: process.argv.slice(2), standardInput: process.stdin, standardOutput: process.stdout });
   process.exitCode = result.exitCode;
 }
