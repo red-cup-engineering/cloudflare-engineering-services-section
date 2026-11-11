@@ -1,0 +1,35 @@
+{
+  "name": "@red-cup-engineering/cloudflare-tunnel-config-checker-service",
+  "version": "0.1.5",
+  "private": true,
+  "type": "module",
+  "description": "Qualify Cloudflare Tunnel configuration, exact installed and running binaries, and observed local cgroup-to-systemd process ownership.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/cloudflare-engineering-services-section.git",
+    "directory": "services/cloudflare-tunnel-config-checker-service"
+  },
+  "exports": {
+    "./verify-ingress": "./src/verify-cloudflare-ingress.mjs",
+    "./verify-running": "./src/verify-running-cloudflared.mjs",
+    "./observe-process-candidates": "./src/observe-cloudflared-process-candidates.mjs",
+    "./assay-local": "./src/assay-local-cloudflared.mjs"
+  },
+  "scripts": {
+    "verify-ingress": "node src/verify-cloudflare-ingress.mjs",
+    "check": "node --check src/verify-cloudflare-ingress.mjs && node --check src/verify-running-cloudflared.mjs && node --check src/observe-cloudflared-process-candidates.mjs && node --check src/assay-local-cloudflared.mjs",
+    "test": "node --test test/*.test.mjs",
+    "verify": "npm run check && npm test",
+    "verify-running": "node src/verify-running-cloudflared.mjs",
+    "observe-process-candidates": "node src/observe-cloudflared-process-candidates.mjs",
+    "assay-local": "node src/assay-local-cloudflared.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT",
+  "funding": {
+    "type": "individual",
+    "url": "https://github.com/561-group/.github/blob/main/TIPS.md"
+  }
+}
