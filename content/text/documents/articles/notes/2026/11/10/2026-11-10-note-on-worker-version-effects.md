@@ -1,4 +1,10 @@
-# Existing Worker version effects
+---
+title: "Existing Worker version effects"
+description: "@red-cup-engineering/cloudflare-engineering-services-section/worker-versions exports a small adapter for one selected existing account and script."
+date-created: 2026-11-10
+type: note
+name: worker-version-effects
+---
 
 `@red-cup-engineering/cloudflare-engineering-services-section/worker-versions` exports a small adapter for one selected existing account and script. It reads the active deployment, immutable version resources, latest uploaded version, non-versioned settings, existing preview configuration, the existing account subdomain, and exact-version module bytes. Its writes are staged version uploads and a single-version 100% deployment. It does not create accounts, bindings, secret values, routes, domains, grants, or preview access.
 
