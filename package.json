@@ -1,5 +1,5 @@
 {
-  "name": "@red-cup-engineering/cloudflare-services-section",
+  "name": "@red-cup-engineering/cloudflare-engineering-services-section",
   "version": "0.1.5",
   "description": "Cloudflare platform services: routing, tunnels, and account inventory for the 561 Group's Cloudflare footprint.",
   "repository": {
@@ -28,10 +28,10 @@
     "@red-cup-engineering/computer-file-engineering-services-section": "0.4.0",
     "@red-cup-engineering/http-engineering-services-section": "^0.6.5-dev.2",
     "@red-cup-engineering/node-js-function-engineering-services-section": "^0.5.1",
-    "@red-cup-engineering/json-services-section": "0.4.0",
-    "@red-cup-engineering/uri-services-section": "0.1.1",
-    "@red-cup-engineering/web-release-candidate-service": "0.3.2",
-    "@red-cup-engineering/static-site-conformance-service": "0.1.2",
+    "@red-cup-engineering/json-engineering-services-section": "0.4.0",
+    "@red-cup-engineering/uri-engineering-services-section": "0.1.1",
+    "@red-cup-engineering/web-release-candidate-computer-systems-publishing-engineering-services-section": "0.3.2",
+    "@red-cup-engineering/static-site-conformance-computer-systems-publishing-engineering-services-section": "0.1.2",
     "jsonc-parser": "3.3.1",
     "wrangler": "4.127.1"
   },

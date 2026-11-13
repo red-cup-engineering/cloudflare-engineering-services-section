@@ -37,7 +37,7 @@
     "check": "node --check scripts/authenticate-linux-colony-with-cloudflare.mjs && node --check src/authenticate-linux-colony-with-cloudflare.mjs && npm test && npm pack --dry-run"
   },
   "dependencies": {
-    "@red-cup-engineering/cbor-services-section": "^0.1.1",
+    "@red-cup-engineering/cbor-engineering-services-section": "^0.1.1",
     "@red-cup-engineering/cryptographic-computer-data-engineering-services-section": "^0.3.3",
     "@red-cup-engineering/computer-file-engineering-services-section": "^0.8.4",
     "@red-cup-engineering/http-engineering-services-section": "^0.6.5-dev.2",

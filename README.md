@@ -106,7 +106,7 @@ WebReleaseManifest -> verified release directory -> Worker Assets binding
   -> separately receipt-bound retirement of a proven duplicate
 ```
 
-`@red-cup-engineering/web-release-candidate-service` owns deterministic
+`@red-cup-engineering/web-release-candidate-computer-systems-publishing-engineering-services-section` owns deterministic
 artifact inventory and digest identity.  `@red-cup-engineering/static-site-
 conformance-service` owns the independent local-link and remote-byte/media/
 digest probe.  This section owns Cloudflare credentials, route observation,

@@ -7,10 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 import { lstat, mkdir, open, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import { parse as parseJsonc } from 'jsonc-parser';
-import { canonicalJson } from '@red-cup-engineering/json-services-section/canonical-json';
-import { makeNiUri } from '@red-cup-engineering/uri-services-section/ni-uri';
-import { projectWebReleaseManifestArtifact, verifyWebReleaseDirectory, createPublicRelease, decidePublicRelease } from '@red-cup-engineering/web-release-candidate-service';
-import { checkStaticSiteInventory, probeStaticSiteRelease } from '@red-cup-engineering/static-site-conformance-service';
+import { canonicalJson } from '@red-cup-engineering/json-engineering-services-section/canonical-json';
+import { makeNiUri } from '@red-cup-engineering/uri-engineering-services-section/ni-uri';
+import { projectWebReleaseManifestArtifact, verifyWebReleaseDirectory, createPublicRelease, decidePublicRelease } from '@red-cup-engineering/web-release-candidate-computer-systems-publishing-engineering-services-section';
+import { checkStaticSiteInventory, probeStaticSiteRelease } from '@red-cup-engineering/static-site-conformance-computer-systems-publishing-engineering-services-section';
 import { withCloudflareToken } from './with-cloudflare-token.mjs';
 
 const API = 'https://api.cloudflare.com/client/v4';
@@ -163,7 +163,7 @@ async function runWrangler(args, { env, outputPath, accountId, timeoutMs, report
 async function receive(candidate, release, origin, fetchImpl, expectedHeaders) {
   const result = await probeStaticSiteRelease({ manifest: candidate.manifest, origin, includePaths: release.channel.probes.map(item => item.artifactPath), expectedHeaders, maxBytes: candidate.maxBytes, timeoutMilliseconds: 15000, concurrency: 2, fetch: fetchImpl });
   demand(result.valid, `Deployed static assets do not match the release: ${JSON.stringify(result.diagnostics)}`);
-  return { kind: 'public-release-observation', version: 1, releaseDigest: release.digest, independent: true, observer: '@red-cup-engineering/static-site-conformance-service', origin: new URL(origin).href, observedAt: new Date().toISOString(), probes: result.probes.map(item => ({ id: item.path, status: item.status, digest: item.digest, ...(item.mediaType ? { contentType: item.mediaType } : {}) })) };
+  return { kind: 'public-release-observation', version: 1, releaseDigest: release.digest, independent: true, observer: '@red-cup-engineering/static-site-conformance-computer-systems-publishing-engineering-services-section', origin: new URL(origin).href, observedAt: new Date().toISOString(), probes: result.probes.map(item => ({ id: item.path, status: item.status, digest: item.digest, ...(item.mediaType ? { contentType: item.mediaType } : {}) })) };
 }
 function receipt(release, providerVersion, routeDigest, candidateOrigin) {
   return { kind: 'public-release-receipt', version: 1, releaseDigest: release.digest, provider: release.target.provider, receiver: release.target.receiver, artifactManifestDigest: release.artifact.manifestDigest, configDigest: release.target.configDigest, bindingDigest: release.target.bindingDigest, baselineProviderVersion: release.snapshot.providerVersion, baselineRouteDigest: release.snapshot.routeDigest, providerVersion, routeDigest, canonicalOrigin: release.channel.canonicalOrigin, ...(candidateOrigin ? { candidateOrigin } : {}) };

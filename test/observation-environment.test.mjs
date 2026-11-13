@@ -24,5 +24,5 @@ test('the original CLI selects the independent operation runtime without a legac
   const source=await readFile(new URL('../scripts/derive-cloudflare-account-inventory.mjs',import.meta.url),'utf8');
   const runtime='@red-cup-engineering/node-js-function-engineering-services-section/operation';
   assert.equal(source.split(runtime).length-1,1,'one original CLI binding selects the independent runtime');
-  assert.equal(source.includes('@red-cup-engineering/javascript-node-services-section/operation'),false);
+  assert.equal(source.includes('@red-cup-engineering/javascript-node-engineering-services-section/operation'),false);
 });

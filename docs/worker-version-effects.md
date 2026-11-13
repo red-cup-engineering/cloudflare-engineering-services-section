@@ -1,6 +1,6 @@
 # Existing Worker version effects
 
-`@red-cup-engineering/cloudflare-services-section/worker-versions` exports a small adapter for one selected existing account and script. It reads the active deployment, immutable version resources, latest uploaded version, non-versioned settings, existing preview configuration, the existing account subdomain, and exact-version module bytes. Its writes are staged version uploads and a single-version 100% deployment. It does not create accounts, bindings, secret values, routes, domains, grants, or preview access.
+`@red-cup-engineering/cloudflare-engineering-services-section/worker-versions` exports a small adapter for one selected existing account and script. It reads the active deployment, immutable version resources, latest uploaded version, non-versioned settings, existing preview configuration, the existing account subdomain, and exact-version module bytes. Its writes are staged version uploads and a single-version 100% deployment. It does not create accounts, bindings, secret values, routes, domains, grants, or preview access.
 
 The application owner must receive the artifact and choose the baseline, traffic policy and recovery conditions. This adapter does not provide a second publisher or a merchant policy engine. It uses the same Cloudflare version API that the owner's existing Wrangler-based release consumes. The static application release remains unchanged and continues to refuse non-assets bindings.
 
