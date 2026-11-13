@@ -2,7 +2,7 @@
 	path = services/cloudflare-r2-services-section
 	url = https://github.com/red-cup-engineering/cloudflare-r2-engineering-services-section.git
 	branch = main
-[submodule "services/cloudflare-activitystreams-operation-services-section"]
-	path = services/cloudflare-activitystreams-operation-services-section
+[submodule "services/cloudflare-activitystreams-engineering-services-section"]
+	path = services/cloudflare-activitystreams-engineering-services-section
 	url = https://github.com/red-cup-engineering/cloudflare-activitystreams-engineering-services-section.git
 	branch = main

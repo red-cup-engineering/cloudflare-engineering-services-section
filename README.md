@@ -148,7 +148,7 @@ a refusal, not authorization to substitute a paid or VPS target.
   Linux host with Cloudflare (own repo).
 - `services/cloudflare-r2-services-section/` — R2 clients, custody rules,
   verified reads, and free-tier admission.
-- `services/cloudflare-activitystreams-operation-services-section/` — R2 and
+- `services/cloudflare-activitystreams-engineering-services-section/` — R2 and
   Worker operations exposed through ActivityStreams adapters.
 
 ## Pay Per Crawl receiving
