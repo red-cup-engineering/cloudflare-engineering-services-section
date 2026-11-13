@@ -1,5 +1,5 @@
-[submodule "services/cloudflare-r2-services-section"]
-	path = services/cloudflare-r2-services-section
+[submodule "services/cloudflare-r2-engineering-services-section"]
+	path = services/cloudflare-r2-engineering-services-section
 	url = https://github.com/red-cup-engineering/cloudflare-r2-engineering-services-section.git
 	branch = main
 [submodule "services/cloudflare-activitystreams-engineering-services-section"]
