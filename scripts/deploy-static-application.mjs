@@ -165,7 +165,7 @@ async function receive(candidate, release, origin, fetchImpl, expectedHeaders) {
   demand(result.valid, `Deployed static assets do not match the release: ${JSON.stringify(result.diagnostics)}`);
   return { kind: 'public-release-observation', version: 1, releaseDigest: release.digest, independent: true, observer: '@red-cup-engineering/static-site-conformance-computer-systems-publishing-engineering-services-section', origin: new URL(origin).href, observedAt: new Date().toISOString(), probes: result.probes.map(item => ({ id: item.path, status: item.status, digest: item.digest, ...(item.mediaType ? { contentType: item.mediaType } : {}) })) };
 }
-function record(release, providerVersion, routeDigest, candidateOrigin) {
+function receipt(release, providerVersion, routeDigest, candidateOrigin) {
   return { kind: 'public-release-receipt', version: 1, releaseDigest: release.digest, provider: release.target.provider, receiver: release.target.receiver, artifactManifestDigest: release.artifact.manifestDigest, configDigest: release.target.configDigest, bindingDigest: release.target.bindingDigest, baselineProviderVersion: release.snapshot.providerVersion, baselineRouteDigest: release.snapshot.routeDigest, providerVersion, routeDigest, canonicalOrigin: release.channel.canonicalOrigin, ...(candidateOrigin ? { candidateOrigin } : {}) };
 }
 
@@ -276,7 +276,7 @@ export async function releaseStaticApplication({ candidate, env = process.env, s
       demand(uploaded.length === 1 && VERSION.test(uploaded[0].version_id), 'Wrangler did not return one uploaded version');
       const url = new URL(uploaded[0].preview_url);
       demand(url.protocol === 'https:' && url.hostname.endsWith('.workers.dev') && !url.username && !url.password, 'Uploaded version has no Workers version URL');
-      state.candidateReceipt = record(release, uploaded[0].version_id, current.routeDigest, new URL('/', url).href);
+      state.candidateReceipt = receipt(release, uploaded[0].version_id, current.routeDigest, new URL('/', url).href);
       state.stage = 'uploaded'; await save(statePath, state);
     }
     const versionId = state.candidateReceipt.providerVersion;
@@ -306,7 +306,7 @@ export async function releaseStaticApplication({ candidate, env = process.env, s
     }
     const active = await snapshot(api, candidate);
     demand(active.providerVersion === versionId && active.routeDigest === state.baseline.routeDigest, 'Cloudflare did not activate the selected version on the existing domains');
-    state.activeReceipt = record(release, versionId, active.routeDigest); state.stage = 'active'; await save(statePath, state);
+    state.activeReceipt = receipt(release, versionId, active.routeDigest); state.stage = 'active'; await save(statePath, state);
     try {
       let lastError;
       for (let attempt = 1; attempt <= publicReceivingAttempts; attempt++) {

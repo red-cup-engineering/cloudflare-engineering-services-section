@@ -89,46 +89,46 @@ const sameProcess = (a, b) => a.target === b.target && a.dev === b.dev &&
   a.ino === b.ino && a.startTicks === b.startTicks;
 const sameImage = (a, b) => a.dev === b.dev && a.ino === b.ino;
 
-export function validateRunningService(service, minimumVersion, inspector = liveInspector) {
+export function qualifyRunningService(service, minimumVersion, inspector = liveInspector) {
   const base = { scope: service.scope, unit: service.unit, expectedBinary: service.binary };
-  const rejected = reason => ({ ...base, status: 'refused', reason });
+  const refused = reason => ({ ...base, status: 'refused', reason });
   try {
     const first = inspector.service(service);
-    if (first.load !== 'loaded') return rejected('service-not-loaded');
-    if (first.state !== 'active') return rejected('service-not-active');
-    if (!Number.isSafeInteger(first.pid) || first.pid <= 0) return rejected('no-running-main-pid');
+    if (first.load !== 'loaded') return refused('service-not-loaded');
+    if (first.state !== 'active') return refused('service-not-active');
+    if (!Number.isSafeInteger(first.pid) || first.pid <= 0) return refused('no-running-main-pid');
 
     const before = inspector.process(first.pid);
-    if (before.target.endsWith(' (deleted)')) return rejected('running-image-deleted');
+    if (before.target.endsWith(' (deleted)')) return refused('running-image-deleted');
     const installed = inspector.installed(service.binary);
-    if (!sameImage(before, installed)) return rejected('running-image-differs-from-installed');
+    if (!sameImage(before, installed)) return refused('running-image-differs-from-installed');
 
     // Version is taken from the current PID's executable, not an unrelated PATH binary.
     const output = inspector.version(first.pid);
     const match = VERSION_OUTPUT.exec(output.trim());
-    if (!match || !parts(match[1])) return rejected('running-version-unparseable');
+    if (!match || !parts(match[1])) return refused('running-version-unparseable');
     const version = match[1];
-    if (!atLeast(version, minimumVersion)) return rejected('running-version-below-minimum');
+    if (!atLeast(version, minimumVersion)) return refused('running-version-below-minimum');
 
     // Re-observe after execution: a restart, binary replacement or recycled PID refuses.
     const after = inspector.process(first.pid);
     const final = inspector.service(service);
     if (final.load !== 'loaded' || final.state !== 'active' || final.pid !== first.pid ||
-        !sameProcess(before, after)) return rejected('process-identity-changed');
+        !sameProcess(before, after)) return refused('process-identity-changed');
     if (!sameImage(after, inspector.installed(service.binary))) {
-      return rejected('installed-image-changed');
+      return refused('installed-image-changed');
     }
     return { ...base, status: 'qualified', pid: first.pid, runningVersion: version };
   } catch {
     // Never include raw systemctl outputs, executable stderr, argv or token material.
-    return rejected('inspection-unavailable');
+    return refused('inspection-unavailable');
   }
 }
 
-export function validateRunningFleet(request, inspector = liveInspector) {
+export function qualifyRunningFleet(request, inspector = liveInspector) {
   validateRequest(request);
   const services = request.services.map(service =>
-    validateRunningService(service, request.minimumVersion, inspector));
+    qualifyRunningService(service, request.minimumVersion, inspector));
   return {
     kind: 'cloudflared.running-systemd-qualification/v1',
     observedAtUtc: new Date().toISOString(),
@@ -162,7 +162,7 @@ export function parseArguments(argv) {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   try {
-    const receipt = validateRunningFleet(parseArguments(process.argv.slice(2)));
+    const receipt = qualifyRunningFleet(parseArguments(process.argv.slice(2)));
     process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
     if (receipt.status !== 'qualified') process.exitCode = 1;
   } catch {

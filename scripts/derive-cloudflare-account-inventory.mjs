@@ -16,7 +16,7 @@ function requireNonEmptyString(value, label) {
   return value;
 }
 
-const rejection = (code, detail) => ({ type: "CloudflareAccountInventoryRefusal", code, ...detail });
+const refusal = (code, detail) => ({ type: "CloudflareAccountInventoryRefusal", code, ...detail });
 
 async function cloudflareGet(fetchImpl, token, path) {
   const response = await fetchImpl(`${API_BASE}${path}`, { headers: { authorization: `Bearer ${token}` } });
@@ -34,16 +34,16 @@ async function cloudflareList(fetchImpl, token, path, perPage, identity) {
     query.set("per_page", String(perPage));
     query.set("page", String(page));
     const response = await cloudflareGet(fetchImpl, token, `${path.split("?")[0]}?${query}`);
-    if (!response.ok) return rejection("CLOUDFLARE_API_REFUSED", { path: response.path, errors: response.body?.errors ?? [] });
+    if (!response.ok) return refusal("CLOUDFLARE_API_REFUSED", { path: response.path, errors: response.body?.errors ?? [] });
     const items = response.body?.result;
     const info = response.body?.result_info;
     if (!Array.isArray(items) || (info?.page !== undefined && info.page !== page)) {
-      return rejection("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
+      return refusal("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
     }
     for (const item of items) {
       const id = identity(item);
       if (typeof id !== "string" || id.length === 0 || seen.has(id)) {
-        return rejection("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
+        return refusal("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
       }
       seen.add(id);
       values.push(item);
@@ -53,29 +53,29 @@ async function cloudflareList(fetchImpl, token, path, perPage, identity) {
     if (!Number.isSafeInteger(actualPerPage) || actualPerPage < 1 || actualPerPage > perPage ||
         (info?.count !== undefined && info.count !== items.length) ||
         (totalCount !== undefined && (!Number.isSafeInteger(totalCount) || totalCount < values.length))) {
-      return rejection("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
+      return refusal("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
     }
     const totalPages = info?.total_pages;
     if (totalPages !== undefined) {
       if (!Number.isSafeInteger(totalPages) || totalPages < 0 || totalPages > 1000 ||
           (totalPages < page && !(page === 1 && totalPages === 0 && items.length === 0)) ||
           (items.length === 0 && page < totalPages)) {
-        return rejection("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
+        return refusal("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
       }
       if (page >= totalPages) {
         if (totalCount !== undefined && values.length !== totalCount) {
-          return rejection("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
+          return refusal("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
         }
         return { values };
       }
     } else if (totalCount !== undefined) {
       if (values.length === totalCount) return { values };
-      if (items.length === 0) return rejection("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
+      if (items.length === 0) return refusal("CLOUDFLARE_PAGINATION_INVALID", { path: response.path });
     } else if (items.length < actualPerPage) {
       return { values };
     }
   }
-  return rejection("CLOUDFLARE_PAGINATION_LIMIT", { path });
+  return refusal("CLOUDFLARE_PAGINATION_LIMIT", { path });
 }
 
 function mapDnsRecord(record) {
@@ -101,7 +101,7 @@ export async function observeCloudflareZoneRouting(request, { environment = proc
   const variable = requireNonEmptyString(request.tokenEnvironmentVariable, "request.tokenEnvironmentVariable");
   if (!ACCOUNT_ID_PATTERN.test(accountId)) throw new TypeError("Cloudflare account ID must be 32 hexadecimal characters");
   const token = environment[variable];
-  if (!token) return rejection("TOKEN_ENVIRONMENT_VARIABLE_UNSET", { tokenEnvironmentVariable: variable });
+  if (!token) return refusal("TOKEN_ENVIRONMENT_VARIABLE_UNSET", { tokenEnvironmentVariable: variable });
   const read = (url, options) => (request.fetch ?? fetch)(url, {
     ...options, signal: AbortSignal.timeout(15000),
   });
@@ -110,7 +110,7 @@ export async function observeCloudflareZoneRouting(request, { environment = proc
   if (selected.type) return selected;
   if (selected.values.length !== 1 || selected.values[0].name !== zoneName ||
       selected.values[0].account?.id !== accountId) {
-    return rejection("CLOUDFLARE_ZONE_SCOPE_MISMATCH", { accountId, zoneName });
+    return refusal("CLOUDFLARE_ZONE_SCOPE_MISMATCH", { accountId, zoneName });
   }
   const zone = selected.values[0];
   const [routes, domains] = await Promise.all([
@@ -118,10 +118,10 @@ export async function observeCloudflareZoneRouting(request, { environment = proc
     cloudflareGet(read, token, `/accounts/${accountId}/workers/domains`),
   ]);
   for (const observation of [routes, domains]) {
-    if (!observation.ok) return rejection("CLOUDFLARE_API_REFUSED", {
+    if (!observation.ok) return refusal("CLOUDFLARE_API_REFUSED", {
       path: observation.path, errors: observation.body?.errors ?? [],
     });
-    if (!Array.isArray(observation.body.result)) return rejection("CLOUDFLARE_LIST_INVALID", { path: observation.path });
+    if (!Array.isArray(observation.body.result)) return refusal("CLOUDFLARE_LIST_INVALID", { path: observation.path });
   }
   return Object.freeze({
     type: "CloudflareZoneRouting", version: 1,
@@ -153,18 +153,18 @@ export async function deriveCloudflareAccountInventory(request, { environment = 
 
   const token = environment[tokenEnvironmentVariable];
   if (typeof token !== "string" || token.length === 0) {
-    return rejection("TOKEN_ENVIRONMENT_VARIABLE_UNSET", { tokenEnvironmentVariable });
+    return refusal("TOKEN_ENVIRONMENT_VARIABLE_UNSET", { tokenEnvironmentVariable });
   }
 
   const verify = await cloudflareGet(fetchImpl, token, "/user/tokens/verify");
-  if (!verify.ok) return rejection("CLOUDFLARE_API_REFUSED", { path: verify.path, errors: verify.body?.errors ?? [] });
+  if (!verify.ok) return refusal("CLOUDFLARE_API_REFUSED", { path: verify.path, errors: verify.body?.errors ?? [] });
   const tokenStatus = verify.body.result?.status ?? null;
 
   const zonesResponse = await cloudflareList(fetchImpl, token, `/zones?account.id=${accountId}`, 50, zone => zone?.id);
   if (zonesResponse.type) return zonesResponse;
   const rawZones = zonesResponse.values;
   if (rawZones.some(zone => zone.account?.id !== undefined && (typeof zone.account.id !== "string" || zone.account.id.toLowerCase() !== accountId.toLowerCase()))) {
-    return rejection("CLOUDFLARE_ACCOUNT_SCOPE_MISMATCH", { accountId });
+    return refusal("CLOUDFLARE_ACCOUNT_SCOPE_MISMATCH", { accountId });
   }
 
   const zones = [];
@@ -178,13 +178,13 @@ export async function deriveCloudflareAccountInventory(request, { environment = 
   }
 
   const workersResponse = await cloudflareGet(fetchImpl, token, `/accounts/${accountId}/workers/scripts`);
-  if (!workersResponse.ok) return rejection("CLOUDFLARE_API_REFUSED", { path: workersResponse.path, errors: workersResponse.body?.errors ?? [] });
-  if (!Array.isArray(workersResponse.body.result)) return rejection("CLOUDFLARE_LIST_INVALID", { path: workersResponse.path });
+  if (!workersResponse.ok) return refusal("CLOUDFLARE_API_REFUSED", { path: workersResponse.path, errors: workersResponse.body?.errors ?? [] });
+  if (!Array.isArray(workersResponse.body.result)) return refusal("CLOUDFLARE_LIST_INVALID", { path: workersResponse.path });
   const workers = workersResponse.body.result.map(mapWorkerScript);
 
   const domainsResponse = await cloudflareGet(fetchImpl, token, `/accounts/${accountId}/workers/domains`);
-  if (!domainsResponse.ok) return rejection("CLOUDFLARE_API_REFUSED", { path: domainsResponse.path, errors: domainsResponse.body?.errors ?? [] });
-  if (!Array.isArray(domainsResponse.body.result)) return rejection("CLOUDFLARE_LIST_INVALID", { path: domainsResponse.path });
+  if (!domainsResponse.ok) return refusal("CLOUDFLARE_API_REFUSED", { path: domainsResponse.path, errors: domainsResponse.body?.errors ?? [] });
+  if (!Array.isArray(domainsResponse.body.result)) return refusal("CLOUDFLARE_LIST_INVALID", { path: domainsResponse.path });
   const customDomains = domainsResponse.body.result.map(mapCustomDomain);
 
   return Object.freeze({
@@ -216,7 +216,7 @@ export async function observeCloudflareBuildMinutes(request, { environment = pro
   const tokenEnvironmentVariable = requireNonEmptyString(request.tokenEnvironmentVariable, "request.tokenEnvironmentVariable");
   const token = environment[tokenEnvironmentVariable];
   if (typeof token !== "string" || !token.length) {
-    return rejection("TOKEN_ENVIRONMENT_VARIABLE_UNSET", { tokenEnvironmentVariable });
+    return refusal("TOKEN_ENVIRONMENT_VARIABLE_UNSET", { tokenEnvironmentVariable });
   }
   let observation;
   try {
@@ -224,24 +224,24 @@ export async function observeCloudflareBuildMinutes(request, { environment = pro
       ...options, signal: AbortSignal.timeout(15_000),
     }), token, `/accounts/${accountId}/builds/account/limits`);
   } catch {
-    return rejection("CLOUDFLARE_BUILD_LIMIT_UNAVAILABLE", { reason: "transport-error" });
+    return refusal("CLOUDFLARE_BUILD_LIMIT_UNAVAILABLE", { reason: "transport-error" });
   }
   if (!observation.ok) {
     // Workers Builds requires Workers CI Read on a supported user token; the
     // account-scoped inventory token may legitimately lack that permission.
-    return rejection("CLOUDFLARE_BUILD_LIMIT_UNAVAILABLE", { reason: "provider-refusal" });
+    return refusal("CLOUDFLARE_BUILD_LIMIT_UNAVAILABLE", { reason: "provider-refusal" });
   }
   const result = observation.body?.result;
   if (!result || typeof result !== "object" || Array.isArray(result)) {
-    return rejection("CLOUDFLARE_BUILD_LIMIT_INVALID", { reason: "missing-result" });
+    return refusal("CLOUDFLARE_BUILD_LIMIT_INVALID", { reason: "missing-result" });
   }
   const reached = result.has_reached_build_minutes_limit;
   const refresh = result?.build_minutes_refresh_on;
   if (reached !== undefined && typeof reached !== "boolean") {
-    return rejection("CLOUDFLARE_BUILD_LIMIT_INVALID", { reason: "invalid-exhaustion-flag" });
+    return refusal("CLOUDFLARE_BUILD_LIMIT_INVALID", { reason: "invalid-exhaustion-flag" });
   }
   if (refresh !== undefined && (typeof refresh !== "string" || !Number.isFinite(Date.parse(refresh)))) {
-    return rejection("CLOUDFLARE_BUILD_LIMIT_INVALID", { reason: "invalid-refresh-time" });
+    return refusal("CLOUDFLARE_BUILD_LIMIT_INVALID", { reason: "invalid-refresh-time" });
   }
   return Object.freeze({
     type: "CloudflareWorkersBuildMinutesObservation",
@@ -269,25 +269,25 @@ export async function deriveCloudflareWorkerStorageBindings(request) {
     request.tokenEnvironmentVariable,"request.tokenEnvironmentVariable");
   const token=process.env[tokenEnvironmentVariable];
   if(typeof token!=="string"||!token.length)
-    return rejection("TOKEN_ENVIRONMENT_VARIABLE_UNSET",{tokenEnvironmentVariable});
+    return refusal("TOKEN_ENVIRONMENT_VARIABLE_UNSET",{tokenEnvironmentVariable});
   const sourceFetch=request.fetch??fetch;
   const boundedFetch=(url,options)=>sourceFetch(url,{
     ...options,signal:AbortSignal.timeout(10000),
   });
   let scriptsResponse;
   try {scriptsResponse=await cloudflareGet(boundedFetch,token,`/accounts/${accountId}/workers/scripts`);}
-  catch {return rejection("CLOUDFLARE_WORKER_BINDING_READ_UNAVAILABLE",{stage:"list-workers"});}
+  catch {return refusal("CLOUDFLARE_WORKER_BINDING_READ_UNAVAILABLE",{stage:"list-workers"});}
   if(!scriptsResponse.ok)
-    return rejection("CLOUDFLARE_WORKER_BINDING_READ_UNAVAILABLE",{stage:"list-workers"});
+    return refusal("CLOUDFLARE_WORKER_BINDING_READ_UNAVAILABLE",{stage:"list-workers"});
   const scripts=scriptsResponse.body?.result,info=scriptsResponse.body?.result_info;
   if(!Array.isArray(scripts)||scripts.length>150||
       (info?.total_count!==undefined&&info.total_count!==scripts.length)||
       (info?.total_pages!==undefined&&info.total_pages>1))
-    return rejection("CLOUDFLARE_WORKER_BINDING_COVERAGE_INCOMPLETE",{stage:"list-workers"});
+    return refusal("CLOUDFLARE_WORKER_BINDING_COVERAGE_INCOMPLETE",{stage:"list-workers"});
   const ids=scripts.map(script=>script?.id);
   if(ids.some(id=>typeof id!=="string"||!/^[a-z0-9_.-]{1,128}$/iu.test(id))
       ||new Set(ids).size!==ids.length)
-    return rejection("CLOUDFLARE_WORKER_BINDING_COVERAGE_INCOMPLETE",{stage:"worker-identities"});
+    return refusal("CLOUDFLARE_WORKER_BINDING_COVERAGE_INCOMPLETE",{stage:"worker-identities"});
   const reads=[];
   // Six bounded concurrent native GETs; total requests cannot exceed the
   // authenticated list's current 150 scripts, and no write route is called.
@@ -372,7 +372,7 @@ export async function observeCloudflareR2Buckets(request, { environment = proces
     request.tokenEnvironmentVariable,"request.tokenEnvironmentVariable");
   const token=environment[tokenEnvironmentVariable];
   if(typeof token!=="string"||!token.length)
-    return rejection("TOKEN_ENVIRONMENT_VARIABLE_UNSET",{tokenEnvironmentVariable});
+    return refusal("TOKEN_ENVIRONMENT_VARIABLE_UNSET",{tokenEnvironmentVariable});
   const sourceFetch=request.fetch??fetch;
   const bounded=(url,options)=>sourceFetch(url,{
     ...options,signal:AbortSignal.timeout(10000),
@@ -384,17 +384,17 @@ export async function observeCloudflareR2Buckets(request, { environment = proces
       +(cursor===undefined?"":`?cursor=${encodeURIComponent(cursor)}`);
     let reply;
     try{reply=await cloudflareGet(bounded,token,path);}
-    catch{return rejection("CLOUDFLARE_R2_BUCKET_COVERAGE_UNAVAILABLE",{reason:"provider-transport"});}
+    catch{return refusal("CLOUDFLARE_R2_BUCKET_COVERAGE_UNAVAILABLE",{reason:"provider-transport"});}
     if(!reply.ok)
-      return rejection("CLOUDFLARE_R2_BUCKET_COVERAGE_UNAVAILABLE",{reason:"native-provider-refusal"});
+      return refusal("CLOUDFLARE_R2_BUCKET_COVERAGE_UNAVAILABLE",{reason:"native-provider-refusal"});
     const rows=reply.body?.result?.buckets,next=reply.body?.result_info?.cursor;
     if(!Array.isArray(rows)||rows.length>1000||buckets.length+rows.length>4096
         ||(next!==undefined&&next!==null&&(typeof next!=="string"||!next)))
-      return rejection("CLOUDFLARE_R2_BUCKET_COVERAGE_INVALID",{reason:"native-response-shape"});
+      return refusal("CLOUDFLARE_R2_BUCKET_COVERAGE_INVALID",{reason:"native-response-shape"});
     for(const bucket of rows){
       const name=bucket?.name;
       if(typeof name!=="string"||!/^[a-z0-9][a-z0-9-]{2,62}$/u.test(name)||names.has(name))
-        return rejection("CLOUDFLARE_R2_BUCKET_COVERAGE_INVALID",{reason:"duplicate-or-invalid-bucket"});
+        return refusal("CLOUDFLARE_R2_BUCKET_COVERAGE_INVALID",{reason:"duplicate-or-invalid-bucket"});
       names.add(name);
       buckets.push({
         name,
@@ -413,10 +413,10 @@ export async function observeCloudflareR2Buckets(request, { environment = proces
       });
     }
     if(cursors.has(next))
-      return rejection("CLOUDFLARE_R2_BUCKET_COVERAGE_INVALID",{reason:"repeated-cursor"});
+      return refusal("CLOUDFLARE_R2_BUCKET_COVERAGE_INVALID",{reason:"repeated-cursor"});
     cursors.add(next);cursor=next;
   }
-  return rejection("CLOUDFLARE_R2_BUCKET_COVERAGE_INVALID",{reason:"page-limit"});
+  return refusal("CLOUDFLARE_R2_BUCKET_COVERAGE_INVALID",{reason:"page-limit"});
 }
 
 
@@ -508,10 +508,10 @@ export async function observeCloudflareKvOperations(
   const ageInUtcDays = (Date.parse(snapshot.toISOString().slice(0,10) + "T00:00:00Z") -
     Date.parse(day + "T00:00:00Z")) / 86400000;
   if (ageInUtcDays < 0 || ageInUtcDays > 30)
-    return rejection("CLOUDFLARE_KV_ANALYTICS_OUTSIDE_RETENTION",{day});
+    return refusal("CLOUDFLARE_KV_ANALYTICS_OUTSIDE_RETENTION",{day});
   const token = environment[variable];
   if (typeof token !== "string" || !token.length)
-    return rejection("TOKEN_ENVIRONMENT_VARIABLE_UNSET",{tokenEnvironmentVariable:variable});
+    return refusal("TOKEN_ENVIRONMENT_VARIABLE_UNSET",{tokenEnvironmentVariable:variable});
   let response, body;
   try {
     response = await (request.fetch ?? fetch)(
@@ -524,25 +524,25 @@ export async function observeCloudflareKvOperations(
         signal:AbortSignal.timeout(10000),
       });
     if (response?.ok !== true)
-      return rejection("CLOUDFLARE_KV_ANALYTICS_UNAVAILABLE",{reason:"provider-refusal"});
+      return refusal("CLOUDFLARE_KV_ANALYTICS_UNAVAILABLE",{reason:"provider-refusal"});
     body = await readCloudflareGraphqlBody(response);
   } catch {
-    return rejection("CLOUDFLARE_KV_ANALYTICS_UNAVAILABLE",{reason:"transport-or-decode"});
+    return refusal("CLOUDFLARE_KV_ANALYTICS_UNAVAILABLE",{reason:"transport-or-decode"});
   }
   if (body === null)
-    return rejection("CLOUDFLARE_KV_ANALYTICS_UNAVAILABLE",{reason:"response-unreadable-or-oversize"});
+    return refusal("CLOUDFLARE_KV_ANALYTICS_UNAVAILABLE",{reason:"response-unreadable-or-oversize"});
   if (!body || typeof body !== "object" || Array.isArray(body) ||
       (body.errors !== undefined && (!Array.isArray(body.errors) || body.errors.length > 0)))
-    return rejection("CLOUDFLARE_KV_ANALYTICS_UNAVAILABLE",{reason:"provider-graphql-refusal"});
+    return refusal("CLOUDFLARE_KV_ANALYTICS_UNAVAILABLE",{reason:"provider-graphql-refusal"});
   const accounts=body.data?.viewer?.accounts;
   if (!Array.isArray(accounts) || accounts.length !== 1 ||
       !accounts[0] || typeof accounts[0] !== "object" || Array.isArray(accounts[0]))
-    return rejection("CLOUDFLARE_KV_ANALYTICS_INVALID",{reason:"account-coverage"});
+    return refusal("CLOUDFLARE_KV_ANALYTICS_INVALID",{reason:"account-coverage"});
   const rows=accounts[0].kvOperationsAdaptiveGroups;
   if (!Array.isArray(rows))
-    return rejection("CLOUDFLARE_KV_ANALYTICS_INVALID",{reason:"operation-coverage"});
+    return refusal("CLOUDFLARE_KV_ANALYTICS_INVALID",{reason:"operation-coverage"});
   if (rows.length >= CLOUDFLARE_KV_GRAPHQL_LIMIT)
-    return rejection("CLOUDFLARE_KV_ANALYTICS_LIMIT",{reason:"result-limit-may-truncate"});
+    return refusal("CLOUDFLARE_KV_ANALYTICS_LIMIT",{reason:"result-limit-may-truncate"});
   const seen=new Set(),groups=[];
   let aggregate=0;
   for (const row of rows) {
@@ -552,13 +552,13 @@ export async function observeCloudflareKvOperations(
         !ACCOUNT_ID_PATTERN.test(namespaceId) ||
         typeof actionType!=="string" || !/^[a-z][a-z0-9_-]{0,31}$/u.test(actionType) ||
         !Number.isSafeInteger(requests) || requests < 0)
-      return rejection("CLOUDFLARE_KV_ANALYTICS_INVALID",{reason:"invalid-operation-group"});
+      return refusal("CLOUDFLARE_KV_ANALYTICS_INVALID",{reason:"invalid-operation-group"});
     const dimension=JSON.stringify([namespaceId.toLowerCase(),actionType,date]);
     if (seen.has(dimension))
-      return rejection("CLOUDFLARE_KV_ANALYTICS_INVALID",{reason:"duplicate-operation-group"});
+      return refusal("CLOUDFLARE_KV_ANALYTICS_INVALID",{reason:"duplicate-operation-group"});
     seen.add(dimension);
     if (!Number.isSafeInteger(aggregate+requests))
-      return rejection("CLOUDFLARE_KV_ANALYTICS_INVALID",{reason:"aggregate-overflow"});
+      return refusal("CLOUDFLARE_KV_ANALYTICS_INVALID",{reason:"aggregate-overflow"});
     aggregate+=requests;
     groups.push(Object.freeze({namespaceId:namespaceId.toLowerCase(),actionType,requests}));
   }
