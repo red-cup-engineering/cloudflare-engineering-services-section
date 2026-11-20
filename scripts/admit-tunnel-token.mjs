@@ -14,7 +14,7 @@ function fail(message) { process.stderr.write(`tunnel-token admission refused: $
 // A deployment-specific config file (--config=<path>) supplies the tunnel
 // name, an optional expected Cloudflare account id, and an optional fixed
 // token path, so callers never need a wrapper script to fix those literals.
-export function readAdmissionConfig(path) {
+export function readValidationConfig(path) {
   const parsed = JSON.parse(readFileSync(resolve(String(path)), "utf8"));
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("--config must name a JSON object");
   return parsed;
@@ -91,7 +91,7 @@ export function admitTunnelToken(token, path, expectedAccountId) {
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
   try {
-    const config = args.has("config") ? readAdmissionConfig(args.get("config")) : {};
+    const config = args.has("config") ? readValidationConfig(args.get("config")) : {};
     const tunnelName = tunnelNameFrom(args.get("tunnel-name") ?? config.tunnelName);
     const accountId = args.get("account-id") ?? config.accountId;
     const token = await readToken();

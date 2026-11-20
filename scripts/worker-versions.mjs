@@ -203,7 +203,7 @@ export function createWorkerVersionClient({ accountId, scriptName, token, fetch:
       if (Object.keys(metadata).some(key => !VERSION_METADATA.has(key))) {
         throw new WorkerVersionEffectError('UNSUPPORTED_VERSION_UPLOAD_METADATA');
       }
-      let retained;
+      let kept;
       try {
         const encoded = JSON.stringify(metadata, (_key, value) => {
           if (value === undefined || ['function', 'symbol', 'bigint'].includes(typeof value) ||
@@ -211,13 +211,13 @@ export function createWorkerVersionClient({ accountId, scriptName, token, fetch:
           return value;
         });
         if (Buffer.byteLength(encoded) > MAX_JSON) throw new TypeError('Metadata limit');
-        retained = JSON.parse(encoded);
+        kept = JSON.parse(encoded);
       } catch { throw new WorkerVersionEffectError('INVALID_VERSION_UPLOAD'); }
-      if (!retained || retained.main_module !== 'worker.mjs' || !Array.isArray(retained.bindings)) {
+      if (!kept || kept.main_module !== 'worker.mjs' || !Array.isArray(kept.bindings)) {
         throw new WorkerVersionEffectError('INVALID_VERSION_UPLOAD');
       }
-      if (retained.annotations !== undefined) {
-        const annotations = retained.annotations;
+      if (kept.annotations !== undefined) {
+        const annotations = kept.annotations;
         if (!annotations || typeof annotations !== 'object' || Array.isArray(annotations) ||
             Object.keys(annotations).some(key => !VERSION_ANNOTATIONS.has(key))) {
           throw new WorkerVersionEffectError('UNSUPPORTED_VERSION_UPLOAD_ANNOTATIONS');
@@ -229,7 +229,7 @@ export function createWorkerVersionClient({ accountId, scriptName, token, fetch:
         }
       }
       const names = new Set();
-      retained.bindings = retained.bindings.map(binding => {
+      kept.bindings = kept.bindings.map(binding => {
         if (!binding || typeof binding.name !== 'string' || !binding.name || names.has(binding.name) ||
             typeof binding.type !== 'string' || !binding.type ||
             (binding.version_id !== undefined && (binding.type !== 'inherit' ||
@@ -239,7 +239,7 @@ export function createWorkerVersionClient({ accountId, scriptName, token, fetch:
         names.add(binding.name);
         return binding.type === 'inherit' ? { ...binding, version_id: selected } : binding;
       });
-      const body = { ...retained, modules: [{ name: 'worker.mjs',
+      const body = { ...kept, modules: [{ name: 'worker.mjs',
         content_type: 'application/javascript+module', content_base64: Buffer.from(moduleBytes).toString('base64') }] };
       if (Buffer.byteLength(JSON.stringify(body)) > MAX_MODULE_JSON) throw new WorkerVersionEffectError('INVALID_VERSION_UPLOAD');
       // This supported JSON operation alone accepts the selected inherit UUID.

@@ -52,7 +52,7 @@ const SECRET_ENVIRONMENT_KEYS = [
 ];
 
 const CELL_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-function createDirectAuthorityCustody(substrate) {
+function createDirectAuthorityStorage(substrate) {
   return Object.freeze({
     async store({ provider, subject, attributes, secret }) {
       const reference = `urn:authority:${encodeURIComponent(provider)}:${encodeURIComponent(subject)}`;
@@ -395,7 +395,7 @@ export async function authenticateLinuxColonyWithCloudflare(request, options = {
         reason: probeError?.code ?? "PROFILE_UNUSABLE"
       });
       const authorize = options.authorize ?? authorizeCloudflareWithPkce;
-      const custody = options.authorityCustody ?? createDirectAuthorityCustody(
+      const storage = options.authorityCustody ?? createDirectAuthorityStorage(
         options.authoritySubstrate ?? createWranglerKeyringAuthoritySubstrate({
           configDirectory: options.wranglerConfigDirectory,
           secretToolPath: join(compatibilityDirectory, "secret-tool")
@@ -407,7 +407,7 @@ export async function authenticateLinuxColonyWithCloudflare(request, options = {
         fetchImpl: options.fetchImpl,
         endpoints: options.oauthEndpoints,
         tokenAttempts: options.tokenAttempts,
-        storeCredential: options.storeCredential ?? ((credential) => custody.store({
+        storeCredential: options.storeCredential ?? ((credential) => storage.store({
           provider: "cloudflare",
           subject: credential.profile,
           attributes: {

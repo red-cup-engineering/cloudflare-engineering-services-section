@@ -9,7 +9,7 @@ import { hostname } from 'node:os';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { observeCloudflaredProcessCandidates } from './observe-cloudflared-process-candidates.mjs';
-import { liveInspector, qualifyRunningService } from './verify-running-cloudflared.mjs';
+import { liveInspector, validateRunningService } from './verify-running-cloudflared.mjs';
 
 const RELEASE = /^\d{4}\.\d{1,2}\.\d+$/;
 const UNIT = /^[A-Za-z0-9_.@-]{1,120}\.service$/;
@@ -48,7 +48,7 @@ const sameProcess = (a, b) => a && b && a.target === b.target &&
 
 export const liveCgroupOf = pid => readFileSync(`/proc/${pid}/cgroup`, 'utf8');
 
-export function assayLocalCloudflared({
+export function checkLocalCloudflared({
   minimumVersion,
   discover = () => observeCloudflaredProcessCandidates(),
   cgroupOf = liveCgroupOf,
@@ -116,7 +116,7 @@ export function assayLocalCloudflared({
       if (!membership) return reject('systemd-owner-unattributed');
       const during = inspector.process(pid);
       if (!sameProcess(before, during)) return reject('process-changed-during-attribution');
-      const observed = qualifyRunningService(
+      const observed = validateRunningService(
         { ...membership, binary: candidate.executable }, minimumVersion, inspector);
       if (observed.status !== 'qualified') return {
         pid, scope: membership.scope, unit: membership.unit,
@@ -137,10 +137,10 @@ export function assayLocalCloudflared({
       return reject('inspection-unavailable');
     }
   });
-  const anyRefusal = candidates.some(c => c.status === 'refused');
+  const anyRejection = candidates.some(c => c.status === 'refused');
   const allCandidatesQualified = candidates.length > 0 &&
     candidates.every(c => c.status === 'qualified');
-  const status = anyRefusal ? 'candidate-qualification-refused' :
+  const status = anyRejection ? 'candidate-qualification-refused' :
     found.status === 'candidates-observed' && allCandidatesQualified
       ? 'qualified-candidates' : 'partial';
   return { ...base, status, discovery, candidates };
@@ -156,9 +156,9 @@ export function requestFrom(argv) {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   try {
-    const receipt = assayLocalCloudflared(requestFrom(process.argv.slice(2)));
-    process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
-    if (receipt.status !== 'qualified-candidates') process.exitCode = 1;
+    const record = checkLocalCloudflared(requestFrom(process.argv.slice(2)));
+    process.stdout.write(`${JSON.stringify(record, null, 2)}\n`);
+    if (record.status !== 'qualified-candidates') process.exitCode = 1;
   } catch {
     process.stderr.write('local cloudflared assay refused: invalid or unavailable request\n');
     process.exitCode = 2;
