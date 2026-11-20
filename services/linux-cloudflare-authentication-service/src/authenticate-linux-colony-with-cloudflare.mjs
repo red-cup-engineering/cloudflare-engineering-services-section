@@ -1,4 +1,5 @@
-import { access, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { makeTemporaryDirectory } from "@red-cup-engineering/computer-file-engineering-services-section/temporary-directory";
+import { access, readFile, realpath, rm } from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir, tmpdir } from "node:os";
@@ -356,7 +357,9 @@ export async function authenticateLinuxColonyWithCloudflare(request, options = {
   const compatibilityDirectory = options.compatibilityDirectory ?? join(CELL_ROOT, "libexec");
   const execute = options.execute ?? run;
   const environment = safeEnvironment(options.environment ?? process.env, compatibilityDirectory);
-  const verificationDirectory = await mkdtemp(join(tmpdir(), "cloudflare-profile-verification-"));
+  const temporaryDirectory = makeTemporaryDirectory("cloudflare-profile-verification");
+  try {
+const verificationDirectory = temporaryDirectory.path;
   const progress = typeof options.onProgress === "function" ? options.onProgress : () => {};
 
   const verifyProfile = async () => {
@@ -459,4 +462,8 @@ export async function authenticateLinuxColonyWithCloudflare(request, options = {
   });
   const id = semanticId(body);
   return Object.freeze({ ...body, id });
+
+  } finally {
+    temporaryDirectory.remove();
+  }
 }
