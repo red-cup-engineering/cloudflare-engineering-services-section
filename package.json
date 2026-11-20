@@ -30,7 +30,8 @@
     "@red-cup-engineering/web-release-candidate-computer-systems-publishing-engineering-services-section": "^0.3.4",
     "@red-cup-engineering/static-site-conformance-computer-systems-publishing-engineering-services-section": "^0.1.4",
     "jsonc-parser": "3.3.1",
-    "wrangler": "4.127.1"
+    "wrangler": "4.127.1",
+    "@red-cup-engineering/signcell": "^0.18.0 || 0.18.1-dev.0"
   },
   "private": false,
   "files": [

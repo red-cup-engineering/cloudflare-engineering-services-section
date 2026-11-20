@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { isNonEmptyString } from "@red-cup-engineering/signcell/values";
 const API_BASE = "https://api.cloudflare.com/client/v4";
 const ACCOUNT_ID_PATTERN = /^[0-9a-f]{32}$/iu;
 
@@ -306,28 +307,28 @@ export async function deriveCloudflareWorkerStorageBindings(request) {
         // Read the provider's actual typed resource reference, not only a KV
         // namespace field. Every projected binding must have one resource identity.
         // Environment values, tokens and arbitrary provider metadata are excluded.
-        const nonempty=value=>typeof value==="string"&&value.length>0;
+        
         const project=b=>{
-          if(!nonempty(b.name))return null;
+          if(!isNonEmptyString(b.name))return null;
           const common={type:b.type,bindingName:b.name,
-            namespaceId:nonempty(b.namespace_id)?b.namespace_id:null};
+            namespaceId:isNonEmptyString(b.namespace_id)?b.namespace_id:null};
           switch(b.type){
             case "kv_namespace":
-              return nonempty(b.namespace_id)?common:null;
+              return isNonEmptyString(b.namespace_id)?common:null;
             case "durable_object_namespace":
-              if(![b.namespace_id,b.class_name,b.dispatch_namespace].some(nonempty))return null;
+              if(![b.namespace_id,b.class_name,b.dispatch_namespace].some(isNonEmptyString))return null;
               return {...common,
-                ...(nonempty(b.class_name)?{className:b.class_name}:{}),
-                ...(nonempty(b.script_name)?{scriptName:b.script_name}:{}),
-                ...(nonempty(b.environment)?{environment:b.environment}:{}),
-                ...(nonempty(b.dispatch_namespace)?{dispatchNamespace:b.dispatch_namespace}:{})};
+                ...(isNonEmptyString(b.class_name)?{className:b.class_name}:{}),
+                ...(isNonEmptyString(b.script_name)?{scriptName:b.script_name}:{}),
+                ...(isNonEmptyString(b.environment)?{environment:b.environment}:{}),
+                ...(isNonEmptyString(b.dispatch_namespace)?{dispatchNamespace:b.dispatch_namespace}:{})};
             case "r2_bucket":
-              return nonempty(b.bucket_name)?{...common,bucketName:b.bucket_name,
-                ...(nonempty(b.jurisdiction)?{jurisdiction:b.jurisdiction}:{})}:null;
+              return isNonEmptyString(b.bucket_name)?{...common,bucketName:b.bucket_name,
+                ...(isNonEmptyString(b.jurisdiction)?{jurisdiction:b.jurisdiction}:{})}:null;
             case "d1":
-              return nonempty(b.database_id)?{...common,databaseId:b.database_id}:null;
+              return isNonEmptyString(b.database_id)?{...common,databaseId:b.database_id}:null;
             case "queue":
-              return nonempty(b.queue_name)?{...common,queueName:b.queue_name}:null;
+              return isNonEmptyString(b.queue_name)?{...common,queueName:b.queue_name}:null;
             default:return null;
           }
         };
