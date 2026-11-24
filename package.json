@@ -1,0 +1,51 @@
+{
+  "name": "@red-cup-engineering/cloudflare-engineering-services-section",
+  "version": "0.1.8-dev.0",
+  "description": "Cloudflare platform services: routing, tunnels, and account inventory for the 561 Group's Cloudflare footprint.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/cloudflare-engineering-services-section.git"
+  },
+  "type": "module",
+  "keywords": [
+    "engineering"
+  ],
+  "exports": {
+    "./index": "./scripts/index.mjs",
+    "./admit-tunnel-token": "./scripts/admit-tunnel-token.mjs",
+    "./verify-cloudflare-ingress": "./scripts/verify-cloudflare-ingress.mjs",
+    "./derive-cloudflare-account-inventory": "./scripts/derive-cloudflare-account-inventory.mjs",
+    "./pay-per-crawl-exclusion": "./scripts/derive-pay-per-crawl-exclusion.mjs",
+    "./receive-pay-per-crawl-exclusion": "./scripts/receive-pay-per-crawl-exclusion.mjs",
+    "./canonical-host": "./scripts/canonical-host.mjs",
+    "./static-application-release": "./scripts/deploy-static-application.mjs",
+    "./worker-versions": "./scripts/worker-versions.mjs"
+  },
+  "dependencies": {
+    "@red-cup-engineering/computer-file-engineering-services-section": "^0.8.8",
+    "@red-cup-engineering/http-engineering-services-section": "^0.6.6",
+    "@red-cup-engineering/node-js-function-engineering-services-section": "^0.5.4",
+    "@red-cup-engineering/json-engine": "^0.5.1",
+    "@red-cup-engineering/uri-engineering-services-section": "^0.1.7",
+    "@red-cup-engineering/web-release-candidate-computer-systems-publishing-engineering-services-section": "^0.3.4",
+    "@red-cup-engineering/static-site-conformance-computer-systems-publishing-engineering-services-section": "^0.1.4",
+    "jsonc-parser": "3.3.1",
+    "wrangler": "4.127.1",
+    "@red-cup-engineering/signcell": "^0.18.0 || 0.18.1-dev.0"
+  },
+  "private": false,
+  "files": [
+    "package.json",
+    "README*",
+    "LICENSE*",
+    "scripts"
+  ],
+  "license": "MIT",
+  "funding": {
+    "type": "individual",
+    "url": "https://github.com/561-group/.github/blob/main/TIPS.md"
+  },
+  "bin": {
+    "deploy-cloudflare-static-application": "./scripts/deploy-static-application.mjs"
+  }
+}

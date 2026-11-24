@@ -1,0 +1,39 @@
+name: canonical-host-deploy
+
+# Re-derives the www aliases from the published estate and redeploys the
+# redirect worker daily, so a new apex is covered without anyone listing it
+# and a dashboard edit cannot silently drop a route.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - scripts/canonical-host*.mjs
+      - scripts/deploy-canonical-host-redirect.mjs
+      - test/canonical-host.test.mjs
+      - .github/workflows/canonical-host-deploy.yml
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --test test/canonical-host.test.mjs
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 337e54ee6dc7d488933f473204a6d89e
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN secret is missing; www aliases are no longer being enforced"
+            exit 1
+          fi
+          node scripts/deploy-canonical-host-redirect.mjs
