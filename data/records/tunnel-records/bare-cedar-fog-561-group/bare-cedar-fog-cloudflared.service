@@ -1,0 +1,15 @@
+[Unit]
+Description=bare-cedar-fog laptop-owned Cloudflare Tunnel ingress
+After=network-online.target bare-cedar-fog-561-group.service
+Wants=network-online.target
+Requires=bare-cedar-fog-561-group.service
+ConditionPathExists=%h/.config/cloudflared/bare-cedar-fog-561-group.token
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/cloudflared tunnel --no-autoupdate run --token-file %h/.config/cloudflared/bare-cedar-fog-561-group.token
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

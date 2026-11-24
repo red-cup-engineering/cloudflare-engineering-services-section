@@ -1,0 +1,15 @@
+{
+  "kind": "bare-cedar-fog.cloudflare-tunnel-config",
+  "tunnelName": "bare-cedar-fog-561-group",
+  "accountId": "337e54ee6dc7d488933f473204a6d89e",
+  "hostname": "bare-cedar-fog.561.group",
+  "service": "http://localhost:19748",
+  "fallback": "http_status:404",
+  "tokenPath": "/home/emsenn/.config/cloudflared/bare-cedar-fog-561-group.token",
+  "binding": "remotely-managed-route.json",
+  "unit": "bare-cedar-fog-cloudflared.service",
+  "consumedBy": {
+    "admission": "@red-cup-engineering/cloudflare-tunnel-auth-service --config=<this file> --stdin --safe-stdin",
+    "verification": "@red-cup-engineering/cloudflare-tunnel-config-checker-service/verify-ingress --config=<this file>"
+  }
+}

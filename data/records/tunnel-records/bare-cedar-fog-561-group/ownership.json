@@ -1,0 +1,12 @@
+{
+  "kind": "ownership-law-shadow",
+  "node": "bare-cedar-fog-cloudflare-ingress",
+  "owners": ["561-group", "bare-cedar-fog"],
+  "rules": [
+    "cloudflared and the dashboard execute only on bare-cedar-fog",
+    "Cloudflare carries public ingress but never owns the dashboard's application or Leader identity decision",
+    "Google OAuth remains the sole Leader-seal requirement at the application boundary",
+    "the one tunnel-specific token resides only at ~/.config/cloudflared/bare-cedar-fog-561-group.token with directory 0700 and file 0600",
+    "cert.pem and account-wide locally managed tunnel credentials are not admitted by this service"
+  ]
+}

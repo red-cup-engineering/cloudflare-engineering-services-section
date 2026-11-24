@@ -1,0 +1,16 @@
+{
+  "kind": "bare-cedar-fog.cloudflare-ingress-law",
+  "id": "laptop-owned-tunnel/v1",
+  "tokenAdmission": "@red-cup-engineering/cloudflare-tunnel-auth-service --config=cloudflare-tunnel.json --stdin --safe-stdin",
+  "enforcementHook": "@red-cup-engineering/cloudflare-tunnel-config-checker-service/verify-ingress --config=cloudflare-tunnel.json",
+  "config": "cloudflare-tunnel.json",
+  "binding": "remotely-managed-route.json",
+  "rule": "the remotely managed tunnel token is admitted only to its fixed protected laptop path; the provider binding names only bare-cedar-fog.561.group to http://localhost:19748 with fail-closed fallback; localhost is the bare-cedar-fog laptop's namespace, never a Cloudflare edge or cold-red-gate; the service executes cloudflared on bare-cedar-fog.",
+  "supersededInterface": "account-wide cert.pem plus local tunnel JSON/config is retired; its displaced template is preserved by SHA-256 in the remote-management rectification record",
+  "cutover": "cold-red-gate remains rollback only until Cloudflare delegation is active and the hostname witnesses the laptop tunnel; retire it only under a later verified act.",
+  "leaderJudgment": [
+    "registrar nameserver transfer",
+    "Google OAuth redirect URI registration",
+    "final VPS relay retirement timing"
+  ]
+}

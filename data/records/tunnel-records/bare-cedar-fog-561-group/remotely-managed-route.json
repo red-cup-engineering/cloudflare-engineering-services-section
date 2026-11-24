@@ -1,0 +1,9 @@
+{
+  "kind": "bare-cedar-fog.cloudflare-remotely-managed-route-binding",
+  "configurationSource": "cloudflare-remote",
+  "tunnelName": "bare-cedar-fog-561-group",
+  "hostname": "bare-cedar-fog.561.group",
+  "service": "http://localhost:19748",
+  "fallback": "http_status:404",
+  "applicationIdentity": "Google OAuth at the bare-cedar-fog application boundary; Cloudflare Access is not a substitute"
+}
