@@ -8,7 +8,7 @@ import { parseEnv } from 'node:util';
 import { lstat, mkdir, open, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import { parse as parseJsonc } from 'jsonc-parser';
 import { canonicalJson } from '@red-cup-engineering/json-engine/canonical-json';
-import { makeNiUri } from '@red-cup-engineering/uri-engineering-services-section/ni-uri';
+import { makeNiUri } from "@red-cup-engineering/semiotic-content-address-system";
 import { projectWebReleaseManifestArtifact, verifyWebReleaseDirectory, createPublicRelease, decidePublicRelease } from '@red-cup-engineering/web-release-candidate-computer-systems-publishing-engineering-services-section';
 import { checkStaticSiteInventory, probeStaticSiteRelease } from '@red-cup-engineering/static-site-conformance-computer-systems-publishing-engineering-services-section';
 import { withCloudflareToken } from './with-cloudflare-token.mjs';

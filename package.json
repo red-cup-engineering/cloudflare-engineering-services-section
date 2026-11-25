@@ -24,14 +24,15 @@
   "dependencies": {
     "@red-cup-engineering/computer-file-engineering-services-section": "^0.8.8",
     "@red-cup-engineering/http-engineering-services-section": "^0.6.6",
-    "@red-cup-engineering/node-js-function-engineering-services-section": "^0.5.4",
     "@red-cup-engineering/json-engine": "^0.5.1",
+    "@red-cup-engineering/node-js-function-engineering-services-section": "^0.5.4",
+    "@red-cup-engineering/semiotic-content-address-system": "0.1.9",
+    "@red-cup-engineering/signcell": "^0.18.0 || 0.18.1-dev.0",
+    "@red-cup-engineering/static-site-conformance-computer-systems-publishing-engineering-services-section": "^0.1.4",
     "@red-cup-engineering/uri-engineering-services-section": "^0.1.7",
     "@red-cup-engineering/web-release-candidate-computer-systems-publishing-engineering-services-section": "^0.3.4",
-    "@red-cup-engineering/static-site-conformance-computer-systems-publishing-engineering-services-section": "^0.1.4",
     "jsonc-parser": "3.3.1",
-    "wrangler": "4.127.1",
-    "@red-cup-engineering/signcell": "^0.18.0 || 0.18.1-dev.0"
+    "wrangler": "4.127.1"
   },
   "private": false,
   "files": [
