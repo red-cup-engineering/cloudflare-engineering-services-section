@@ -8,7 +8,7 @@ import { parseEnv } from 'node:util';
 import { lstat, mkdir, open, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import { parse as parseJsonc } from 'jsonc-parser';
 import { canonicalJson } from '@red-cup-engineering/json-engine/canonical-json';
-import { makeNiUri } from "@red-cup-engineering/semiotic-content-address-system";
+import { semanticId } from "@red-cup-engineering/semiotic-content-address-system";
 import { projectWebReleaseManifestArtifact, verifyWebReleaseDirectory, createPublicRelease, decidePublicRelease } from '@red-cup-engineering/web-release-candidate-computer-systems-publishing-engineering-services-section';
 import { checkStaticSiteInventory, probeStaticSiteRelease } from '@red-cup-engineering/static-site-conformance-computer-systems-publishing-engineering-services-section';
 import { withCloudflareToken } from './with-cloudflare-token.mjs';
@@ -22,7 +22,6 @@ const ASSET_KEYS = new Set(['directory', 'html_handling', 'not_found_handling'])
 const VERSION = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const require = createRequire(import.meta.url);
 const demand = (condition, message) => { if (!condition) throw new Error(message); };
-const digest = value => makeNiUri(Buffer.from(canonicalJson(value)));
 const same = (left, right) => canonicalJson(left) === canonicalJson(right);
 
 async function jsonFile(path, fallback) {
@@ -132,7 +131,7 @@ async function snapshot(api, candidate) {
   demand(Array.isArray(bindings) && bindings.every(item => item?.type === 'assets'), 'Existing Worker has non-static bindings');
   const deployment = deploymentResult.result?.deployments?.[0];
   demand(deployment && deployment.versions?.length === 1 && deployment.versions[0].percentage === 100 && VERSION.test(deployment.versions[0].version_id), 'Existing Worker must have one active 100-percent version');
-  return { deploymentId: deployment.id, providerVersion: deployment.versions[0].version_id, routeDigest: digest(domains), domains };
+  return { deploymentId: deployment.id, providerVersion: deployment.versions[0].version_id, routeDigest: semanticId(domains), domains };
 }
 function subprocessEnvironment(env, outputPath, accountId) {
   const result = Object.fromEntries(Object.entries(env).filter(([key]) => !/^(?:CLOUDFLARE|CF_|WRANGLER_)/i.test(key)));
